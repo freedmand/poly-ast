@@ -1,0 +1,84 @@
+/**
+ * Run optimizations on the Poly AST
+ */
+
+import { Block, Statement, Expression, Literal } from "./ast";
+
+export class Context {}
+
+export function constantAdd(left: Literal, right: Literal): Expression {
+  if (
+    left.value.type == "NumberLiteral" &&
+    right.value.type == "NumberLiteral"
+  ) {
+    return {
+      type: "Literal",
+      value: {
+        type: "NumberLiteral",
+        value: left.value.value + right.value.value,
+      },
+    };
+  }
+
+  if (
+    left.value.type == "StringLiteral" &&
+    right.value.type == "StringLiteral"
+  ) {
+    return {
+      type: "Literal",
+      value: {
+        type: "StringLiteral",
+        value: left.value.value + right.value.value,
+      },
+    };
+  }
+
+  throw new Error(`Cannot add ${left.value} and ${right.value}`);
+}
+
+export function optimizeExpression(
+  context: Context,
+  expression: Expression
+): Expression {
+  switch (expression.type) {
+    case "Plus":
+      if (
+        expression.left.type == "Literal" &&
+        expression.right.type == "Literal"
+      ) {
+        return constantAdd(expression.left, expression.right);
+      }
+    default:
+      return expression;
+  }
+}
+
+export function optimizeStatement(
+  context: Context,
+  statement: Statement
+): Statement {
+  switch (statement.type) {
+    case "Block":
+      return optimize(statement);
+    case "Declare":
+      statement.value = optimizeExpression(context, statement.value);
+      return statement;
+    case "Return":
+      if (statement.value != null) {
+        statement.value = optimizeExpression(context, statement.value);
+      }
+      return statement;
+  }
+}
+
+export function optimize(code: Block): Block {
+  const context = new Context();
+  const statements: Block = {
+    type: "Block",
+    body: [],
+  };
+  for (let i = 0; i < code.body.length; i++) {
+    statements.body.push(optimizeStatement(context, code.body[i]));
+  }
+  return statements;
+}

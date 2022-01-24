@@ -1,0 +1,3 @@
+# Declarations
+
+TypeScript declaration files
