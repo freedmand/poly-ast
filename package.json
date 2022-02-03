@@ -1,6 +1,8 @@
 {
   "devDependencies": {
+    "@types/css-tree": "1.0.7",
     "@types/jest": "27.4.0",
+    "@types/jsdom": "^16.2.14",
     "@types/node": "17.0.8",
     "esbuild": "0.14.11",
     "esbuild-jest": "0.5.0",
@@ -15,8 +17,11 @@
   "dependencies": {
     "astring": "1.8.1",
     "astring-jsx": "github:charlie-cyf/astring-jsx",
+    "css-tree": "2.0.4",
+    "hast-util-to-html": "8.0.3",
+    "jsdom": "^19.0.0",
     "meriyah": "4.2.0",
     "prettier": "2.5.1",
-    "typescript-eslint": "^0.0.1-alpha.0"
+    "typescript-eslint": "0.0.1-alpha.0"
   }
 }
