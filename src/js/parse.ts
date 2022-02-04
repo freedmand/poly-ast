@@ -15,14 +15,19 @@ function assert(condition: boolean, error: Error) {
   if (!condition) throw Error;
 }
 
+function assertNotNull<T>(value: T | null, error: Error): T {
+  if (value == null) throw Error;
+  return value;
+}
+
 function isIdentifier(
   declarator: ESTree.VariableDeclarator["id"]
 ): declarator is ESTree.Identifier {
   return declarator.type == "Identifier";
 }
 
-export function parse(code: string): ESTree.Program {
-  return parseScript(code, {
+export function parse(code: string, stripWhitespace = false): ESTree.Program {
+  const parseResult: ESTree.Program = parseScript(code, {
     ranges: false,
     loc: false,
     globalReturn: true,
@@ -30,6 +35,10 @@ export function parse(code: string): ESTree.Program {
     jsx: true,
     module: true,
   });
+  if (stripWhitespace) {
+    return stripWhitespaceLiterals(parseResult);
+  }
+  return parseResult;
 }
 
 export function programToAst(program: ESTree.Program): ast.Block {
@@ -39,8 +48,8 @@ export function programToAst(program: ESTree.Program): ast.Block {
   };
 }
 
-export function parseToAst(code: string): ast.Block {
-  return programToAst(parse(code));
+export function parseToAst(code: string, stripWhitespace = false): ast.Block {
+  return programToAst(parse(code, stripWhitespace));
 }
 
 export function statementToAst(statement: ESTree.Statement): ast.Statement {
@@ -87,6 +96,11 @@ export function statementToAst(statement: ESTree.Statement): ast.Statement {
         type: "Return",
         value: expressionToAst(statement.argument),
       };
+    case "ExpressionStatement":
+      return {
+        type: "ExpressionStatement",
+        value: expressionToAst(statement.expression),
+      };
   }
   throw new NotSupported(`Unsupported statement: ${statement.type}`);
 }
@@ -105,6 +119,8 @@ export function expressionToAst(expression: ESTree.Expression): ast.Expression {
       };
     case "BinaryExpression":
       return binaryExpressionToAst(expression);
+    case "AssignmentExpression":
+      return assignmentExpressionToAst(expression);
     case "ArrayExpression":
       return {
         type: "List",
@@ -122,8 +138,9 @@ export function expressionToAst(expression: ESTree.Expression): ast.Expression {
           "Only simple identifiers are supported as tag names"
         );
       }
-      if (expression.openingElement.attributes.length > 0) {
-        throw new NotSupported("JSX attributes are not yet supported");
+      const attributes: ast.Attribute[] = [];
+      for (const attribute of expression.openingElement.attributes) {
+        attributes.push(JSXAttributeToAst(attribute));
       }
       const children: ast.Expression[] = [];
       for (const child of expression.children) {
@@ -137,6 +154,7 @@ export function expressionToAst(expression: ESTree.Expression): ast.Expression {
       return {
         type: "Element",
         tag: openingElementName.name,
+        attributes,
         children,
       };
     case "ArrowFunctionExpression":
@@ -226,6 +244,22 @@ export function binaryExpressionToAst(
   );
 }
 
+export function assignmentExpressionToAst(
+  expression: ESTree.AssignmentExpression
+): ast.Expression {
+  switch (expression.operator) {
+    case "=":
+      return {
+        type: "Assign",
+        left: expressionToAst(expression.left),
+        right: expressionToAst(expression.right),
+      };
+  }
+  throw new NotSupported(
+    `Unsupported assignment expression (${expression.operator})`
+  );
+}
+
 export function JSXChildToAst(child: ESTree.JSXChild): ast.Expression | null {
   switch (child.type) {
     case "JSXEmptyExpression":
@@ -251,4 +285,97 @@ export function JSXChildToAst(child: ESTree.JSXChild): ast.Expression | null {
     case "JSXSpreadChild":
       throw new NotSupported("JSX spread children not yet supported");
   }
+}
+
+export function JSXAttributeToAst(
+  attribute: ESTree.JSXAttribute | ESTree.JSXSpreadAttribute
+): ast.Attribute {
+  switch (attribute.type) {
+    case "JSXSpreadAttribute":
+      throw new NotSupported("JSXSpreadAttribute not yet supported");
+    case "JSXAttribute":
+      switch (attribute.name.type) {
+        case "JSXIdentifier":
+          return {
+            type: "NormalAttribute",
+            key: attribute.name.name,
+            value: JSXAttributeValueToAst(attribute.value),
+          };
+        case "JSXNamespacedName":
+          switch (attribute.name.namespace.type) {
+            case "JSXMemberExpression":
+              throw new NotSupported("JSXMemberExpression not supported");
+            case "JSXIdentifier":
+              switch (attribute.name.namespace.name) {
+                case "on":
+                  return {
+                    type: "EventAttribute",
+                    event: attribute.name.name.name,
+                    eventHandler: assertNotNull(
+                      JSXAttributeValueToAst(attribute.value),
+                      new NotSupported("Event handler cannot be empty")
+                    ),
+                  };
+                default:
+                  throw new NotSupported(
+                    `Attribute namespace ${attribute.name.namespace.name} not supported`
+                  );
+              }
+          }
+      }
+  }
+}
+
+export function JSXAttributeValueToAst(
+  value: ESTree.JSXAttributeValue
+): ast.Expression | null {
+  if (value == null) return null;
+  switch (value.type) {
+    case "JSXElement":
+    case "Literal":
+      return expressionToAst(value);
+    case "JSXExpressionContainer":
+    case "JSXFragment":
+    case "JSXSpreadChild":
+      return JSXChildToAst(value);
+    case "JSXIdentifier":
+      throw new Error("JSXIdentifier not supported");
+  }
+}
+
+export function stripWhitespaceLiterals(
+  program: ESTree.Program
+): ESTree.Program {
+  return assertNotNull(
+    stripWhitespaceLiteralNode(program),
+    new Error("Program should not be only whitespace")
+  );
+}
+
+export function stripWhitespaceLiteralNode<T extends ESTree.Node>(
+  node: T
+): T | null {
+  if (node.type == "JSXText" && node.value.includes("\n")) {
+    const trimmed = node.value.trim();
+    if (trimmed.length == 0) return null;
+    return {
+      ...node,
+      value: trimmed,
+    };
+  }
+  const output: T = { ...node };
+  for (const key in node) {
+    const value = node[key];
+    if (Array.isArray(value)) {
+      const newArray = [];
+      for (const subnode of value) {
+        const strippedNode = stripWhitespaceLiteralNode(subnode);
+        if (strippedNode != null) newArray.push(strippedNode);
+      }
+      output[key] = newArray as any;
+    } else if (typeof value == "object" && "type" in value) {
+      output[key] = stripWhitespaceLiteralNode(value as any);
+    }
+  }
+  return output;
 }

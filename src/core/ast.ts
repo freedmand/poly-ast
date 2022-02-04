@@ -2,12 +2,13 @@
  * The primary definition of the Poly AST
  */
 
-export type Statement = Block | Declare | Return;
+export type Statement = Block | Declare | ExpressionStatement | Return;
 
 export type Expression =
   | Literal
   | Identifier
   | Plus
+  | Assign
   | List
   | Element
   | Func
@@ -29,6 +30,11 @@ export type Declare = {
 export type Return = {
   type: "Return";
   value: Expression | null;
+};
+
+export type ExpressionStatement = {
+  type: "ExpressionStatement";
+  value: Expression;
 };
 
 export type Literal = {
@@ -61,6 +67,12 @@ export type Plus = {
   right: Expression;
 };
 
+export type Assign = {
+  type: "Assign";
+  left: Expression;
+  right: Expression;
+};
+
 export type List = {
   type: "List";
   value: Expression[];
@@ -69,6 +81,7 @@ export type List = {
 export type Element = {
   type: "Element";
   tag: string;
+  attributes: Attribute[];
   children: Expression[];
 };
 
@@ -82,4 +95,18 @@ export type Call = {
   type: "Call";
   func: Expression;
   arguments: Expression[];
+};
+
+export type Attribute = NormalAttribute | EventAttribute;
+
+export type NormalAttribute = {
+  type: "NormalAttribute";
+  key: string;
+  value: Expression | null;
+};
+
+export type EventAttribute = {
+  type: "EventAttribute";
+  event: string;
+  eventHandler: Expression;
 };

@@ -14,8 +14,12 @@ export class JSDomTest {
   document: Document;
   console: string = "";
 
-  constructor(readonly consolidatedHtmlFile: ConsolidatedHtmlFile) {
-    this.html = consolidatedHtmlFileToString(consolidatedHtmlFile);
+  constructor(readonly inputFile: ConsolidatedHtmlFile | string) {
+    if (typeof inputFile == "string") {
+      this.html = inputFile;
+    } else {
+      this.html = consolidatedHtmlFileToString(inputFile);
+    }
     this.prettyHtml = prettifyHtml(this.html);
     this.virtualConsole = new VirtualConsole();
     // Set up console event listener
