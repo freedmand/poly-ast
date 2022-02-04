@@ -9,6 +9,7 @@ export type Expression =
   | Identifier
   | Plus
   | Assign
+  | Reactive
   | List
   | Element
   | Func
@@ -71,6 +72,11 @@ export type Assign = {
   type: "Assign";
   left: Expression;
   right: Expression;
+};
+
+export type Reactive = {
+  type: "Reactive";
+  value: Expression;
 };
 
 export type List = {

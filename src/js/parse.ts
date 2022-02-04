@@ -169,9 +169,22 @@ export function expressionToAst(expression: ESTree.Expression): ast.Expression {
         body: functionBodyToAst(expression.body),
       };
     case "CallExpression":
+      const callee = expression.callee as ESTree.Expression; // ESTree.CallExpression.callee is typed as any in meriyah
+      if (callee.type == "Identifier" && callee.name == "reactive") {
+        assert(
+          expression.arguments.length == 1,
+          new NotSupported("Reactives can only be applied to one expression")
+        );
+        // Return a reactive expression
+        return {
+          type: "Reactive",
+          value: expressionToAst(expression.arguments[0]),
+        };
+      }
+
       return {
         type: "Call",
-        func: expressionToAst(expression.callee as ESTree.Expression), // ESTree.CallExpression.callee is typed as any in meriyah
+        func: expressionToAst(callee),
         arguments: expression.arguments.map((subExpression) =>
           expressionToAst(subExpression)
         ),

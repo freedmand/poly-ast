@@ -61,6 +61,11 @@ export function statementToESTree(statement: ast.Statement): ESTree.Statement {
         argument:
           statement.value == null ? null : expressionToESTree(statement.value),
       };
+    case "ExpressionStatement":
+      return {
+        type: "ExpressionStatement",
+        expression: expressionToESTree(statement.value),
+      };
   }
 }
 
@@ -84,6 +89,22 @@ export function expressionToESTree(
         operator: operatorFromBinaryExpression(expression),
         left: expressionToESTree(expression.left),
         right: expressionToESTree(expression.right),
+      };
+    case "Assign":
+      return {
+        type: "AssignmentExpression",
+        operator: "=",
+        left: expressionToESTree(expression.left),
+        right: expressionToESTree(expression.right),
+      };
+    case "Reactive":
+      return {
+        type: "CallExpression",
+        callee: {
+          type: "Identifier",
+          name: "reactive",
+        },
+        arguments: [expressionToESTree(expression.value)],
       };
     case "List":
       return {
@@ -162,12 +183,16 @@ export function elementToJSXElement(element: ast.Element): ESTree.JSXElement {
       children.push(transformedChild);
     }
   }
+  const attributes: ESTree.JSXAttribute[] = [];
+  for (const attribute of element.attributes) {
+    attributes.push(attributeToJSXAttribute(attribute));
+  }
   const hasEndTag = children.length > 0;
   return {
     type: "JSXElement",
     openingElement: {
       type: "JSXOpeningElement",
-      attributes: [],
+      attributes,
       name: {
         type: "JSXIdentifier",
         name: element.tag,
@@ -184,6 +209,55 @@ export function elementToJSXElement(element: ast.Element): ESTree.JSXElement {
           },
         }
       : null,
+  };
+}
+
+export function attributeToJSXAttribute(
+  attribute: ast.Attribute
+): ESTree.JSXAttribute {
+  switch (attribute.type) {
+    case "NormalAttribute":
+      return {
+        type: "JSXAttribute",
+        name: {
+          type: "JSXIdentifier",
+          name: attribute.key,
+        },
+        value: attributeValueToJSXAttributeValue(attribute.value),
+      };
+    case "EventAttribute":
+      return {
+        type: "JSXAttribute",
+        name: {
+          type: "JSXNamespacedName",
+          namespace: {
+            type: "JSXIdentifier",
+            name: "on",
+          },
+          name: {
+            type: "JSXIdentifier",
+            name: attribute.event,
+          },
+        },
+        value: attributeValueToJSXAttributeValue(attribute.eventHandler),
+      };
+  }
+}
+
+export function attributeValueToJSXAttributeValue(
+  attributeValue: ast.Expression | null
+): ESTree.JSXAttributeValue {
+  if (attributeValue == null) return null;
+  switch (attributeValue.type) {
+    case "Literal":
+    case "Element":
+      return expressionToESTree(attributeValue) as
+        | ESTree.Literal
+        | ESTree.JSXElement;
+  }
+  return {
+    type: "JSXExpressionContainer",
+    expression: expressionToESTree(attributeValue),
   };
 }
 

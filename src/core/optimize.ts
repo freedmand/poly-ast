@@ -68,6 +68,9 @@ export function optimizeStatement(
         statement.value = optimizeExpression(context, statement.value);
       }
       return statement;
+    case "ExpressionStatement":
+      statement.value = optimizeExpression(context, statement.value);
+      return statement;
   }
 }
 
