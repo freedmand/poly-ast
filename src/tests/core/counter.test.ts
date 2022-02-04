@@ -17,9 +17,15 @@
  */
 
 // import * as ast from "../../core/ast";
+import { compile } from "../../core/compile";
 import { parseToAst } from "../../js/parse";
 import counterSource from "./counter.source.js";
-import { programToSource } from "../../js/translate";
+import {
+  ConsolidatedHtmlFile,
+  consolidatedHtmlFileToString,
+  emptyCss,
+} from "../../core/output";
+import { ESTreeToSource, programToSource } from "../../js/translate";
 import util from "util";
 
 test("counter", () => {
@@ -32,4 +38,15 @@ test("source reconstruction", () => {
   const ast = parseToAst(counterSource);
   console.log(programToSource(ast));
   expect(programToSource(ast)).toEqual(counterSource);
+});
+
+test("compile", () => {
+  const jsProgram = compile(parseToAst(counterSource, true));
+  const file: ConsolidatedHtmlFile = {
+    type: "SingleHtmlFile",
+    html: [],
+    css: emptyCss,
+    javascript: jsProgram,
+  };
+  console.log(consolidatedHtmlFileToString(file));
 });

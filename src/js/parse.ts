@@ -4,21 +4,7 @@
 
 import * as ast from "../core/ast";
 import { parseScript, ESTree } from "meriyah";
-
-class NotSupported extends Error {
-  constructor(readonly message: string) {
-    super(message);
-  }
-}
-
-function assert(condition: boolean, error: Error) {
-  if (!condition) throw Error;
-}
-
-function assertNotNull<T>(value: T | null, error: Error): T {
-  if (value == null) throw Error;
-  return value;
-}
+import { assert, assertNotNull, NotSupported } from "../core/util";
 
 function isIdentifier(
   declarator: ESTree.VariableDeclarator["id"]
