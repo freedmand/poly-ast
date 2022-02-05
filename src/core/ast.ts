@@ -2,7 +2,15 @@
  * The primary definition of the Poly AST
  */
 
-export type Statement = Block | Declare | ExpressionStatement | Return;
+export type Node = Statement | Expression;
+
+export type Program = BlockStatement;
+
+export type Statement =
+  | BlockStatement
+  | DeclareStatement
+  | ExpressionStatement
+  | ReturnStatement;
 
 export type Expression =
   | Literal
@@ -17,19 +25,19 @@ export type Expression =
 
 // Subtypes defined below
 
-export type Block = {
-  type: "Block";
+export type BlockStatement = {
+  type: "BlockStatement";
   body: Statement[];
 };
 
-export type Declare = {
-  type: "Declare";
+export type DeclareStatement = {
+  type: "DeclareStatement";
   name: string;
   value: Expression;
 };
 
-export type Return = {
-  type: "Return";
+export type ReturnStatement = {
+  type: "ReturnStatement";
   value: Expression | null;
 };
 

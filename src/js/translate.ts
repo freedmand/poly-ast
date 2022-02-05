@@ -19,7 +19,7 @@ export function ESTreeToSource(program: ESTree.Program): string {
   );
 }
 
-export function programToESTree(program: ast.Block): ESTree.Program {
+export function programToESTree(program: ast.Program): ESTree.Program {
   return {
     type: "Program",
     sourceType: "module",
@@ -27,20 +27,20 @@ export function programToESTree(program: ast.Block): ESTree.Program {
   };
 }
 
-export function programToSource(program: ast.Block): string {
+export function programToSource(program: ast.Program): string {
   return ESTreeToSource(programToESTree(program));
 }
 
 export function statementToESTree(statement: ast.Statement): ESTree.Statement {
   switch (statement.type) {
-    case "Block":
+    case "BlockStatement":
       return {
         type: "BlockStatement",
         body: statement.body.map((subStatement) =>
           statementToESTree(subStatement)
         ),
       };
-    case "Declare":
+    case "DeclareStatement":
       return {
         type: "VariableDeclaration",
         kind: "let",
@@ -55,7 +55,7 @@ export function statementToESTree(statement: ast.Statement): ESTree.Statement {
           },
         ],
       };
-    case "Return":
+    case "ReturnStatement":
       return {
         type: "ReturnStatement",
         argument:
@@ -119,7 +119,7 @@ export function expressionToESTree(
       return {
         type: "ArrowFunctionExpression",
         async: false,
-        expression: expression.body.type == "Return",
+        expression: expression.body.type == "ReturnStatement",
         params: expression.params.map((param) => ({
           type: "Identifier",
           name: param,
@@ -140,10 +140,10 @@ export function expressionToESTree(
 export function functionBodyToESTree(
   body: ast.Statement
 ): ESTree.Expression | ESTree.BlockStatement {
-  if (body.type == "Return" && body.value != null) {
+  if (body.type == "ReturnStatement" && body.value != null) {
     return expressionToESTree(body.value);
   }
-  if (body.type == "Block") {
+  if (body.type == "BlockStatement") {
     return {
       type: "BlockStatement",
       body: body.body.map((statement) => statementToESTree(statement)),

@@ -27,14 +27,14 @@ export function parse(code: string, stripWhitespace = false): ESTree.Program {
   return parseResult;
 }
 
-export function programToAst(program: ESTree.Program): ast.Block {
+export function programToAst(program: ESTree.Program): ast.Program {
   return {
-    type: "Block",
+    type: "BlockStatement",
     body: program.body.map((statement) => statementToAst(statement)),
   };
 }
 
-export function parseToAst(code: string, stripWhitespace = false): ast.Block {
+export function parseToAst(code: string, stripWhitespace = false): ast.Program {
   return programToAst(parse(code, stripWhitespace));
 }
 
@@ -42,7 +42,7 @@ export function statementToAst(statement: ESTree.Statement): ast.Statement {
   switch (statement.type) {
     case "BlockStatement":
       return {
-        type: "Block",
+        type: "BlockStatement",
         body: statement.body.map((subStatement) =>
           statementToAst(subStatement)
         ),
@@ -69,17 +69,17 @@ export function statementToAst(statement: ESTree.Statement): ast.Statement {
         );
       }
       const expression = expressionToAst(declarator.init);
-      return { type: "Declare", name, value: expression };
+      return { type: "DeclareStatement", name, value: expression };
     case "ReturnStatement":
       if (statement.argument == null) {
         // Null return value
         return {
-          type: "Return",
+          type: "ReturnStatement",
           value: null,
         };
       }
       return {
-        type: "Return",
+        type: "ReturnStatement",
         value: expressionToAst(statement.argument),
       };
     case "ExpressionStatement":
@@ -193,12 +193,12 @@ export function functionBodyToAst(
 ): ast.Statement {
   if (body.type == "BlockStatement") {
     return {
-      type: "Block",
+      type: "BlockStatement",
       body: body.body.map((statement) => statementToAst(statement)),
     };
   }
   return {
-    type: "Return",
+    type: "ReturnStatement",
     value: expressionToAst(body),
   };
 }

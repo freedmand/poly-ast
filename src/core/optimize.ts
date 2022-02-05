@@ -2,7 +2,7 @@
  * Run optimizations on the Poly AST
  */
 
-import { Block, Statement, Expression, Literal } from "./ast";
+import { BlockStatement, Statement, Expression, Literal } from "./ast";
 
 export class Context {}
 
@@ -58,12 +58,12 @@ export function optimizeStatement(
   statement: Statement
 ): Statement {
   switch (statement.type) {
-    case "Block":
+    case "BlockStatement":
       return optimize(statement);
-    case "Declare":
+    case "DeclareStatement":
       statement.value = optimizeExpression(context, statement.value);
       return statement;
-    case "Return":
+    case "ReturnStatement":
       if (statement.value != null) {
         statement.value = optimizeExpression(context, statement.value);
       }
@@ -74,10 +74,10 @@ export function optimizeStatement(
   }
 }
 
-export function optimize(code: Block): Block {
+export function optimize(code: BlockStatement): BlockStatement {
   const context = new Context();
-  const statements: Block = {
-    type: "Block",
+  const statements: BlockStatement = {
+    type: "BlockStatement",
     body: [],
   };
   for (let i = 0; i < code.body.length; i++) {

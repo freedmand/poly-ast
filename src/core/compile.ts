@@ -44,7 +44,7 @@ function isEventAttribute(
   return attribute.type == "EventAttribute";
 }
 
-export function compile(program: ast.Block): ESTree.Program {
+export function compile(program: ast.Program): ESTree.Program {
   return {
     type: "Program",
     sourceType: "module",
@@ -95,12 +95,12 @@ export function compile(program: ast.Block): ESTree.Program {
 
 export function compileStatement(statement: ast.Statement): ESTree.Statement {
   switch (statement.type) {
-    case "Block":
+    case "BlockStatement":
       return {
         type: "BlockStatement",
         body: statement.body.map((statement) => compileStatement(statement)),
       };
-    case "Declare":
+    case "DeclareStatement":
       return {
         type: "VariableDeclaration",
         kind: "let",
@@ -115,7 +115,7 @@ export function compileStatement(statement: ast.Statement): ESTree.Statement {
           },
         ],
       };
-    case "Return":
+    case "ReturnStatement":
       return {
         type: "ReturnStatement",
         argument:
@@ -227,20 +227,22 @@ export function compileExpression(
         type: "ArrowFunctionExpression",
         async: false,
         expression:
-          expression.body.type == "Return" && expression.body.value != null,
+          expression.body.type == "ReturnStatement" &&
+          expression.body.value != null,
         params: expression.params.map<ESTree.Identifier>((param) => ({
           type: "Identifier",
           name: param,
         })),
         body:
-          expression.body.type == "Block"
+          expression.body.type == "BlockStatement"
             ? {
                 type: "BlockStatement",
                 body: expression.body.body.map((statement) =>
                   compileStatement(statement)
                 ),
               }
-            : expression.body.type == "Return" && expression.body.value != null
+            : expression.body.type == "ReturnStatement" &&
+              expression.body.value != null
             ? compileExpression(expression.body.value)
             : {
                 type: "BlockStatement",
