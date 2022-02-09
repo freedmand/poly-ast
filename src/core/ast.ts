@@ -2,7 +2,7 @@
  * The primary definition of the Poly AST
  */
 
-export type Node = Statement | Expression;
+export type Node = Statement | Expression | Attribute;
 
 export type Program = BlockStatement;
 

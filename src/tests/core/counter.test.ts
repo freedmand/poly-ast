@@ -25,18 +25,17 @@ import {
   consolidatedHtmlFileToString,
   emptyCss,
 } from "../../core/output";
-import { ESTreeToSource, programToSource } from "../../js/translate";
+import { programToSource } from "../../js/translate";
 import util from "util";
 
 test("counter", () => {
   const program = parseToAst(counterSource, true);
-  console.log(util.inspect(program, false, null, true));
+  // console.log(util.inspect(program, false, null, true));
   // TODO: test functional counter app
 });
 
 test("source reconstruction", () => {
   const ast = parseToAst(counterSource);
-  console.log(programToSource(ast));
   expect(programToSource(ast)).toEqual(counterSource);
 });
 
@@ -48,5 +47,4 @@ test("compile", () => {
     css: emptyCss,
     javascript: jsProgram,
   };
-  console.log(consolidatedHtmlFileToString(file));
 });

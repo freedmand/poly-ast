@@ -1,8 +1,4 @@
-export class NotSupported extends Error {
-  constructor(readonly message: string) {
-    super(message);
-  }
-}
+export class NotSupported extends Error {}
 
 export function assert(condition: boolean, error: Error) {
   if (!condition) throw Error;
