@@ -113,3 +113,34 @@ test("undeclared variable", () => {
   );
   expect(() => analyzeScopes(parseToAst(`a`))).toThrowError(VariableUndeclared);
 });
+
+test("reassign variable", () => {
+  expect(() => analyzeScopes(parseToAst(`let x = 1; x = 2;`))).not.toThrow();
+  expect(() => analyzeScopes(parseToAst(`x = 1;`))).toThrowError(
+    VariableUndeclared
+  );
+  expect(() => analyzeScopes(parseToAst(`let y = (x = 1);`))).toThrowError(
+    VariableUndeclared
+  );
+});
+
+test("function parameters", () => {
+  expect(() => analyzeScopes(parseToAst(`(a) => a`))).not.toThrow();
+  expect(() => analyzeScopes(parseToAst(`let a = 1; (a) => a`))).not.toThrow();
+  expect(() =>
+    analyzeScopes(parseToAst(`let a = 1; (a, b) => a`))
+  ).not.toThrow();
+  expect(() =>
+    analyzeScopes(parseToAst(`let a = 1; (a, b) => c`))
+  ).toThrowError(VariableUndeclared);
+  expect(() => analyzeScopes(parseToAst(`(a) => { let a = 1; }`))).toThrowError(
+    VariableRedeclared
+  );
+  expect(() => analyzeScopes(parseToAst(`(a) => { a = 1; }`))).not.toThrow();
+  expect(() => analyzeScopes(parseToAst(`(a) => { b = 1; }`))).toThrowError(
+    VariableUndeclared
+  );
+  expect(() => analyzeScopes(parseToAst(`(a) => ( b = 1 )`))).toThrowError(
+    VariableUndeclared
+  );
+});

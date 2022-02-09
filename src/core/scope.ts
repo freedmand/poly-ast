@@ -53,15 +53,23 @@ export function analyzeScopes(program: ast.Program): Scope {
   let scope = rootScope;
 
   walk(program, {
-    enter(object, parent, property, index) {
+    enter(object, parent) {
       // Only check nodes
       if (object.kind != "node") return;
       const node = object.value;
       if (node.type == "BlockStatement") {
         // Create a new scope
-        scope = new Scope(scope);
+        if (parent == null || parent.type != "Func") {
+          // ... but only if the parent node wasn't a function
+          scope = new Scope(scope);
+        }
       } else if (node.type == "DeclareStatement") {
         scope.add(node.name, node);
+      } else if (node.type == "Func") {
+        scope = new Scope(scope);
+        for (const name of node.params) {
+          scope.add(name, node);
+        }
       } else if (node.type == "Identifier") {
         if (!scope.has(node.name)) {
           throw new VariableUndeclared(`${node.name} not found in scope`);
