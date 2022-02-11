@@ -102,7 +102,7 @@ export type Element = {
 export type Func = {
   type: "Func";
   params: string[];
-  body: Statement;
+  body: BlockStatement;
 };
 
 export type Call = {

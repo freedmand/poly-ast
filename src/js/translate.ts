@@ -119,7 +119,7 @@ export function expressionToESTree(
       return {
         type: "ArrowFunctionExpression",
         async: false,
-        expression: expression.body.type == "ReturnStatement",
+        expression: false,
         params: expression.params.map((param) => ({
           type: "Identifier",
           name: param,

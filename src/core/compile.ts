@@ -226,28 +226,17 @@ export function compileExpression(
       return {
         type: "ArrowFunctionExpression",
         async: false,
-        expression:
-          expression.body.type == "ReturnStatement" &&
-          expression.body.value != null,
+        expression: false,
         params: expression.params.map<ESTree.Identifier>((param) => ({
           type: "Identifier",
           name: param,
         })),
-        body:
-          expression.body.type == "BlockStatement"
-            ? {
-                type: "BlockStatement",
-                body: expression.body.body.map((statement) =>
-                  compileStatement(statement)
-                ),
-              }
-            : expression.body.type == "ReturnStatement" &&
-              expression.body.value != null
-            ? compileExpression(expression.body.value)
-            : {
-                type: "BlockStatement",
-                body: [compileStatement(expression.body)],
-              },
+        body: {
+          type: "BlockStatement",
+          body: expression.body.body.map((statement) =>
+            compileStatement(statement)
+          ),
+        },
       };
     case "Call":
       return {

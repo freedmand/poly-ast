@@ -190,7 +190,7 @@ export function extractIdentifierName(
 
 export function functionBodyToAst(
   body: ESTree.Expression | ESTree.BlockStatement
-): ast.Statement {
+): ast.BlockStatement {
   if (body.type == "BlockStatement") {
     return {
       type: "BlockStatement",
@@ -198,8 +198,8 @@ export function functionBodyToAst(
     };
   }
   return {
-    type: "ReturnStatement",
-    value: expressionToAst(body),
+    type: "BlockStatement",
+    body: [{ type: "ReturnStatement", value: expressionToAst(body) }],
   };
 }
 

@@ -1,11 +1,57 @@
-import { walk, walkNode, WalkObject, walkValue } from "../../core/walker";
+import { walk, WalkNode, WalkObject } from "../../core/walker";
 import { parseToAst } from "../../js/parse";
 import * as ast from "../../core/ast";
 import counterSource from "./counter.source.js";
 
+type SimplifiedWalkObject = SimplifiedWalkNode | SimplifiedWalkValue;
+
+type SimplifiedWalkNode = {
+  kind: "node";
+  value: ast.Node;
+};
+
+type SimplifiedWalkValue = {
+  kind: "value";
+  value: any;
+};
+
+function simplifiedWalkNode(node: ast.Node): SimplifiedWalkNode {
+  return {
+    kind: "node",
+    value: node,
+  };
+}
+
+function simplifiedWalkValue(value: any): SimplifiedWalkValue {
+  return {
+    kind: "value",
+    value,
+  };
+}
+
+function toSimplified(walkObject: WalkObject): SimplifiedWalkObject {
+  switch (walkObject.kind) {
+    case "node":
+      return {
+        kind: "node",
+        value: walkObject.value,
+      };
+    case "value":
+      return {
+        kind: "value",
+        value: walkObject.value,
+      };
+  }
+}
+
+function extractNode(node: WalkNode | null): ast.Node | null {
+  if (node == null) return null;
+  return node.value;
+}
+
 type EventTuple = [
   "enter" | "leave",
-  WalkObject,
+  SimplifiedWalkObject,
   ast.Node | null,
   string | null,
   number | null
@@ -16,11 +62,23 @@ test("tree walker", () => {
   const events: EventTuple[] = [];
 
   walk(program, {
-    enter(object, parent, property, index) {
-      events.push(["enter", object, parent, property, index]);
+    enter(object) {
+      events.push([
+        "enter",
+        toSimplified(object),
+        extractNode(object.parent),
+        object.property,
+        object.index,
+      ]);
     },
-    leave(object, parent, property, index) {
-      events.push(["leave", object, parent, property, index]);
+    leave(object) {
+      events.push([
+        "leave",
+        toSimplified(object),
+        extractNode(object.parent),
+        object.property,
+        object.index,
+      ]);
     },
   });
 
@@ -61,112 +119,265 @@ test("tree walker", () => {
 
   expect(events).toEqual([
     // Program
-    ["enter", walkNode(program), null, null, null],
+    ["enter", simplifiedWalkNode(program), null, null, null],
 
     // Count declare
-    ["enter", walkNode(countDeclare), program, "body", 0],
+    ["enter", simplifiedWalkNode(countDeclare), program, "body", 0],
     // Count name
-    ["enter", walkValue(countName), countDeclare, "name", null],
-    ["leave", walkValue(countName), countDeclare, "name", null],
+    ["enter", simplifiedWalkValue(countName), countDeclare, "name", null],
+    ["leave", simplifiedWalkValue(countName), countDeclare, "name", null],
     // Count value
-    ["enter", walkNode(countValue), countDeclare, "value", null],
+    ["enter", simplifiedWalkNode(countValue), countDeclare, "value", null],
     // Count number literal
-    ["enter", walkValue(countNumberLiteral), countValue, "value", null],
-    ["leave", walkValue(countNumberLiteral), countValue, "value", null],
-    ["leave", walkNode(countValue), countDeclare, "value", null],
-    ["leave", walkNode(countDeclare), program, "body", 0],
+    [
+      "enter",
+      simplifiedWalkValue(countNumberLiteral),
+      countValue,
+      "value",
+      null,
+    ],
+    [
+      "leave",
+      simplifiedWalkValue(countNumberLiteral),
+      countValue,
+      "value",
+      null,
+    ],
+    ["leave", simplifiedWalkNode(countValue), countDeclare, "value", null],
+    ["leave", simplifiedWalkNode(countDeclare), program, "body", 0],
     // Return statement
-    ["enter", walkNode(returnStatement), program, "body", 1],
+    ["enter", simplifiedWalkNode(returnStatement), program, "body", 1],
 
     // Div element
-    ["enter", walkNode(divElement), returnStatement, "value", null],
-    ["enter", walkValue(divTag), divElement, "tag", null],
-    ["leave", walkValue(divTag), divElement, "tag", null],
+    ["enter", simplifiedWalkNode(divElement), returnStatement, "value", null],
+    ["enter", simplifiedWalkValue(divTag), divElement, "tag", null],
+    ["leave", simplifiedWalkValue(divTag), divElement, "tag", null],
     // H1 element
-    ["enter", walkNode(h1Element), divElement, "children", 0],
-    ["enter", walkValue(h1Tag), h1Element, "tag", null],
-    ["leave", walkValue(h1Tag), h1Element, "tag", null],
-    ["enter", walkNode(counterText), h1Element, "children", 0],
-    ["enter", walkValue(counterStringLiteral), counterText, "value", null],
-    ["leave", walkValue(counterStringLiteral), counterText, "value", null],
-    ["leave", walkNode(counterText), h1Element, "children", 0],
-    ["leave", walkNode(h1Element), divElement, "children", 0],
+    ["enter", simplifiedWalkNode(h1Element), divElement, "children", 0],
+    ["enter", simplifiedWalkValue(h1Tag), h1Element, "tag", null],
+    ["leave", simplifiedWalkValue(h1Tag), h1Element, "tag", null],
+    ["enter", simplifiedWalkNode(counterText), h1Element, "children", 0],
+    [
+      "enter",
+      simplifiedWalkValue(counterStringLiteral),
+      counterText,
+      "value",
+      null,
+    ],
+    [
+      "leave",
+      simplifiedWalkValue(counterStringLiteral),
+      counterText,
+      "value",
+      null,
+    ],
+    ["leave", simplifiedWalkNode(counterText), h1Element, "children", 0],
+    ["leave", simplifiedWalkNode(h1Element), divElement, "children", 0],
     // Paragraph
-    ["enter", walkNode(pElement), divElement, "children", 1],
-    ["enter", walkValue(pTag), pElement, "tag", null],
-    ["leave", walkValue(pTag), pElement, "tag", null],
-    ["enter", walkNode(countText), pElement, "children", 0],
-    ["enter", walkValue(countStringLiteral), countText, "value", null],
-    ["leave", walkValue(countStringLiteral), countText, "value", null],
-    ["leave", walkNode(countText), pElement, "children", 0],
-    ["enter", walkNode(countIdentifier), pElement, "children", 1],
-    ["enter", walkValue(countIdentifierName), countIdentifier, "name", null],
-    ["leave", walkValue(countIdentifierName), countIdentifier, "name", null],
-    ["leave", walkNode(countIdentifier), pElement, "children", 1],
-    ["leave", walkNode(pElement), divElement, "children", 1],
+    ["enter", simplifiedWalkNode(pElement), divElement, "children", 1],
+    ["enter", simplifiedWalkValue(pTag), pElement, "tag", null],
+    ["leave", simplifiedWalkValue(pTag), pElement, "tag", null],
+    ["enter", simplifiedWalkNode(countText), pElement, "children", 0],
+    [
+      "enter",
+      simplifiedWalkValue(countStringLiteral),
+      countText,
+      "value",
+      null,
+    ],
+    [
+      "leave",
+      simplifiedWalkValue(countStringLiteral),
+      countText,
+      "value",
+      null,
+    ],
+    ["leave", simplifiedWalkNode(countText), pElement, "children", 0],
+    ["enter", simplifiedWalkNode(countIdentifier), pElement, "children", 1],
+    [
+      "enter",
+      simplifiedWalkValue(countIdentifierName),
+      countIdentifier,
+      "name",
+      null,
+    ],
+    [
+      "leave",
+      simplifiedWalkValue(countIdentifierName),
+      countIdentifier,
+      "name",
+      null,
+    ],
+    ["leave", simplifiedWalkNode(countIdentifier), pElement, "children", 1],
+    ["leave", simplifiedWalkNode(pElement), divElement, "children", 1],
     // Button
-    ["enter", walkNode(buttonElement), divElement, "children", 2],
-    ["enter", walkValue(buttonTag), buttonElement, "tag", null],
-    ["leave", walkValue(buttonTag), buttonElement, "tag", null],
+    ["enter", simplifiedWalkNode(buttonElement), divElement, "children", 2],
+    ["enter", simplifiedWalkValue(buttonTag), buttonElement, "tag", null],
+    ["leave", simplifiedWalkValue(buttonTag), buttonElement, "tag", null],
     // Click event attribute
-    ["enter", walkNode(clickEventAttribute), buttonElement, "attributes", 0],
-    ["enter", walkValue(clickEventName), clickEventAttribute, "event", null],
-    ["leave", walkValue(clickEventName), clickEventAttribute, "event", null],
     [
       "enter",
-      walkNode(clickEventHandler),
+      simplifiedWalkNode(clickEventAttribute),
+      buttonElement,
+      "attributes",
+      0,
+    ],
+    [
+      "enter",
+      simplifiedWalkValue(clickEventName),
+      clickEventAttribute,
+      "event",
+      null,
+    ],
+    [
+      "leave",
+      simplifiedWalkValue(clickEventName),
+      clickEventAttribute,
+      "event",
+      null,
+    ],
+    [
+      "enter",
+      simplifiedWalkNode(clickEventHandler),
       clickEventAttribute,
       "eventHandler",
       null,
     ],
-    ["enter", walkNode(clickBody), clickEventHandler, "body", null],
-    ["enter", walkNode(clickExpression), clickBody, "body", 0],
-    ["enter", walkNode(clickAssign), clickExpression, "value", null],
-    ["enter", walkNode(assignCountLeft), clickAssign, "left", null],
-    ["enter", walkValue(assignCountLeftName), assignCountLeft, "name", null],
-    ["leave", walkValue(assignCountLeftName), assignCountLeft, "name", null],
-    ["leave", walkNode(assignCountLeft), clickAssign, "left", null],
-    ["enter", walkNode(assignPlus), clickAssign, "right", null],
-    ["enter", walkNode(assignCountRight), assignPlus, "left", null],
-    ["enter", walkValue(assignCountRightName), assignCountRight, "name", null],
-    ["leave", walkValue(assignCountRightName), assignCountRight, "name", null],
-    ["leave", walkNode(assignCountRight), assignPlus, "left", null],
-    ["enter", walkNode(assignCountNumber), assignPlus, "right", null],
+    ["enter", simplifiedWalkNode(clickBody), clickEventHandler, "body", null],
+    ["enter", simplifiedWalkNode(clickExpression), clickBody, "body", 0],
+    ["enter", simplifiedWalkNode(clickAssign), clickExpression, "value", null],
+    ["enter", simplifiedWalkNode(assignCountLeft), clickAssign, "left", null],
     [
       "enter",
-      walkValue(assignCountNumberLiteral),
+      simplifiedWalkValue(assignCountLeftName),
+      assignCountLeft,
+      "name",
+      null,
+    ],
+    [
+      "leave",
+      simplifiedWalkValue(assignCountLeftName),
+      assignCountLeft,
+      "name",
+      null,
+    ],
+    ["leave", simplifiedWalkNode(assignCountLeft), clickAssign, "left", null],
+    ["enter", simplifiedWalkNode(assignPlus), clickAssign, "right", null],
+    ["enter", simplifiedWalkNode(assignCountRight), assignPlus, "left", null],
+    [
+      "enter",
+      simplifiedWalkValue(assignCountRightName),
+      assignCountRight,
+      "name",
+      null,
+    ],
+    [
+      "leave",
+      simplifiedWalkValue(assignCountRightName),
+      assignCountRight,
+      "name",
+      null,
+    ],
+    ["leave", simplifiedWalkNode(assignCountRight), assignPlus, "left", null],
+    ["enter", simplifiedWalkNode(assignCountNumber), assignPlus, "right", null],
+    [
+      "enter",
+      simplifiedWalkValue(assignCountNumberLiteral),
       assignCountNumber,
       "value",
       null,
     ],
     [
       "leave",
-      walkValue(assignCountNumberLiteral),
+      simplifiedWalkValue(assignCountNumberLiteral),
       assignCountNumber,
       "value",
       null,
     ],
-    ["leave", walkNode(assignCountNumber), assignPlus, "right", null],
-    ["leave", walkNode(assignPlus), clickAssign, "right", null],
-    ["leave", walkNode(clickAssign), clickExpression, "value", null],
-    ["leave", walkNode(clickExpression), clickBody, "body", 0],
-    ["leave", walkNode(clickBody), clickEventHandler, "body", null],
+    ["leave", simplifiedWalkNode(assignCountNumber), assignPlus, "right", null],
+    ["leave", simplifiedWalkNode(assignPlus), clickAssign, "right", null],
+    ["leave", simplifiedWalkNode(clickAssign), clickExpression, "value", null],
+    ["leave", simplifiedWalkNode(clickExpression), clickBody, "body", 0],
+    ["leave", simplifiedWalkNode(clickBody), clickEventHandler, "body", null],
     [
       "leave",
-      walkNode(clickEventHandler),
+      simplifiedWalkNode(clickEventHandler),
       clickEventAttribute,
       "eventHandler",
       null,
     ],
-    ["leave", walkNode(clickEventAttribute), buttonElement, "attributes", 0],
-    ["enter", walkNode(plusText), buttonElement, "children", 0],
-    ["enter", walkValue(plusStringLiteral), plusText, "value", null],
-    ["leave", walkValue(plusStringLiteral), plusText, "value", null],
-    ["leave", walkNode(plusText), buttonElement, "children", 0],
-    ["leave", walkNode(buttonElement), divElement, "children", 2],
+    [
+      "leave",
+      simplifiedWalkNode(clickEventAttribute),
+      buttonElement,
+      "attributes",
+      0,
+    ],
+    ["enter", simplifiedWalkNode(plusText), buttonElement, "children", 0],
+    ["enter", simplifiedWalkValue(plusStringLiteral), plusText, "value", null],
+    ["leave", simplifiedWalkValue(plusStringLiteral), plusText, "value", null],
+    ["leave", simplifiedWalkNode(plusText), buttonElement, "children", 0],
+    ["leave", simplifiedWalkNode(buttonElement), divElement, "children", 2],
     // Leave top-level things
-    ["leave", walkNode(divElement), returnStatement, "value", null],
-    ["leave", walkNode(returnStatement), program, "body", 1],
-    ["leave", walkNode(program), null, null, null],
+    ["leave", simplifiedWalkNode(divElement), returnStatement, "value", null],
+    ["leave", simplifiedWalkNode(returnStatement), program, "body", 1],
+    ["leave", simplifiedWalkNode(program), null, null, null],
   ] as EventTuple[]);
+});
+
+type path = [string, string | null, number | null];
+function extractPath(walkObject: WalkNode | null): path[] {
+  if (walkObject == null) return [];
+  return (
+    [[walkObject.value.type, walkObject.property, walkObject.index]] as path[]
+  ).concat(extractPath(walkObject.parent));
+}
+
+test("parent path", async () => {
+  const program = parseToAst(
+    `
+    let x = a => {
+      let y = b => {
+        let z = c => {
+          return [a, b, c];
+        }
+      }
+    }
+  `,
+    true
+  );
+
+  const cPath = await new Promise<WalkNode | null>((resolve) => {
+    walk(program, {
+      enter(node) {
+        if (
+          node.kind == "node" &&
+          node.value.type == "Identifier" &&
+          node.value.name == "c"
+        ) {
+          resolve(node);
+        }
+      },
+    });
+    resolve(null);
+  });
+
+  if (cPath == null) {
+    fail("Expected cPath to be non-null");
+  }
+  expect(extractPath(cPath)).toEqual([
+    ["Identifier", "value", 2],
+    ["List", "value", null],
+    ["ReturnStatement", "body", 0],
+    ["BlockStatement", "body", null],
+    ["Func", "value", null],
+    ["DeclareStatement", "body", 0],
+    ["BlockStatement", "body", null],
+    ["Func", "value", null],
+    ["DeclareStatement", "body", 0],
+    ["BlockStatement", "body", null],
+    ["Func", "value", null],
+    ["DeclareStatement", "body", 0],
+    ["BlockStatement", null, null],
+  ]);
 });

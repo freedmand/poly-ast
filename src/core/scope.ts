@@ -12,6 +12,7 @@ export class VariableUndeclared extends Error {}
 export class Scope {
   declarations: { [name: string]: ast.Node } = {};
   children: Scope[] = [];
+  references: { [name: string]: ast.Node[] } = {};
 
   constructor(readonly parent: Scope | null = null) {
     if (this.parent != null) {
@@ -46,6 +47,13 @@ export class Scope {
     }
     this.declarations[name] = node;
   }
+
+  addReference(name: string, node: ast.Node) {
+    if (!this.has(name)) {
+      throw new VariableUndeclared(`${name} not found in scope`);
+    }
+    this.references[name] = (this.references[name] || []).concat([node]);
+  }
 }
 
 export function analyzeScopes(program: ast.Program): Scope {
@@ -53,27 +61,31 @@ export function analyzeScopes(program: ast.Program): Scope {
   let scope = rootScope;
 
   walk(program, {
-    enter(object, parent) {
+    enter(object) {
       // Only check nodes
       if (object.kind != "node") return;
       const node = object.value;
       if (node.type == "BlockStatement") {
         // Create a new scope
-        if (parent == null || parent.type != "Func") {
+        if (object.parent == null || object.parent.value.type != "Func") {
           // ... but only if the parent node wasn't a function
           scope = new Scope(scope);
         }
       } else if (node.type == "DeclareStatement") {
+        // Declare a variable in the scope
         scope.add(node.name, node);
       } else if (node.type == "Func") {
+        // Create a new scope for functions
+        // with all the parameters declared
         scope = new Scope(scope);
         for (const name of node.params) {
           scope.add(name, node);
         }
       } else if (node.type == "Identifier") {
-        if (!scope.has(node.name)) {
-          throw new VariableUndeclared(`${node.name} not found in scope`);
-        }
+        // Reference the variable in the scope
+        scope.addReference(node.name, node);
+      } else if (node.type == "Reactive") {
+        // TODO: reactive
       }
     },
   });
