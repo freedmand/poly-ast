@@ -32,7 +32,7 @@ export type BlockStatement = {
 
 export type DeclareStatement = {
   type: "DeclareStatement";
-  name: string;
+  name: Name;
   value: Expression;
 };
 
@@ -67,7 +67,7 @@ export type NullLiteral = {
 
 export type Identifier = {
   type: "Identifier";
-  name: string;
+  name: Name;
 };
 
 export type Plus = {
@@ -101,7 +101,7 @@ export type Element = {
 
 export type Func = {
   type: "Func";
-  params: string[];
+  params: Name[];
   body: BlockStatement;
 };
 
@@ -124,3 +124,5 @@ export type EventAttribute = {
   event: string;
   eventHandler: Expression;
 };
+
+export type Name = string | symbol;

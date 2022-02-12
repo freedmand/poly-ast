@@ -10,9 +10,9 @@ export class VariableRedeclared extends Error {}
 export class VariableUndeclared extends Error {}
 
 export class Scope {
-  declarations: { [name: string]: ast.Node } = {};
+  declarations: { [name: ast.Name]: ast.Node } = {};
   children: Scope[] = [];
-  references: { [name: string]: ast.Node[] } = {};
+  references: { [name: ast.Name]: ast.Node[] } = {};
 
   constructor(readonly parent: Scope | null = null) {
     if (this.parent != null) {
@@ -20,7 +20,7 @@ export class Scope {
     }
   }
 
-  has(name: string): boolean {
+  has(name: ast.Name): boolean {
     if (this.declarations[name] != null) {
       return true;
     }
@@ -41,16 +41,16 @@ export class Scope {
     throw new VariableUndeclared(`${name} has not been declared`);
   }
 
-  add(name: string, node: ast.Node) {
+  add(name: ast.Name, node: ast.Node) {
     if (this.declarations[name] != null) {
-      throw new VariableRedeclared(`${name} has already been declared`);
+      throw new VariableRedeclared(`${String(name)} has already been declared`);
     }
     this.declarations[name] = node;
   }
 
-  addReference(name: string, node: ast.Node) {
+  addReference(name: ast.Name, node: ast.Node) {
     if (!this.has(name)) {
-      throw new VariableUndeclared(`${name} not found in scope`);
+      throw new VariableUndeclared(`${String(name)} not found in scope`);
     }
     this.references[name] = (this.references[name] || []).concat([node]);
   }

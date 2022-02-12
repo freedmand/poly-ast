@@ -7,6 +7,7 @@ import { ESTree } from "meriyah";
 import { generate, baseGenerator } from "astring";
 import { JsxGenerator } from "astring-jsx";
 import prettier from "prettier";
+import { assertNameIsString, PlaceholderError } from "../core/util";
 
 const extendedGenerator = { ...JsxGenerator, ...baseGenerator };
 
@@ -41,6 +42,10 @@ export function statementToESTree(statement: ast.Statement): ESTree.Statement {
         ),
       };
     case "DeclareStatement":
+      assertNameIsString(
+        statement.name,
+        "Cannot translate placeholder in declare statement"
+      );
       return {
         type: "VariableDeclaration",
         kind: "let",
@@ -79,6 +84,10 @@ export function expressionToESTree(
         value: literalToValue(expression.value),
       };
     case "Identifier":
+      assertNameIsString(
+        expression.name,
+        "Cannot translate placeholder in identifier"
+      );
       return {
         type: "Identifier",
         name: expression.name,
@@ -120,10 +129,16 @@ export function expressionToESTree(
         type: "ArrowFunctionExpression",
         async: false,
         expression: false,
-        params: expression.params.map((param) => ({
-          type: "Identifier",
-          name: param,
-        })),
+        params: expression.params.map((param) => {
+          assertNameIsString(
+            param,
+            "Cannot translate function parameter placeholder"
+          );
+          return {
+            type: "Identifier",
+            name: param,
+          };
+        }),
         body: functionBodyToESTree(expression.body),
       };
     case "Call":

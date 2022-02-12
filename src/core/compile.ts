@@ -7,7 +7,7 @@
 import { ESTree } from "meriyah";
 import { parse } from "../js/parse";
 import * as ast from "./ast";
-import { NotSupported } from "./util";
+import { assertNameIsString, NotSupported, PlaceholderError } from "./util";
 
 const dom = "POLY_dom";
 const domAppend = "POLY_domAppend";
@@ -101,6 +101,10 @@ export function compileStatement(statement: ast.Statement): ESTree.Statement {
         body: statement.body.map((statement) => compileStatement(statement)),
       };
     case "DeclareStatement":
+      assertNameIsString(
+        statement.name,
+        "Cannot compile placeholder in declare statement"
+      );
       return {
         type: "VariableDeclaration",
         kind: "let",
@@ -136,6 +140,10 @@ export function compileExpression(
     case "Literal":
       return compileLiteral(expression);
     case "Identifier":
+      assertNameIsString(
+        expression.name,
+        "Cannot compile placeholder in identifier"
+      );
       return {
         type: "Identifier",
         name: expression.name,
@@ -227,10 +235,16 @@ export function compileExpression(
         type: "ArrowFunctionExpression",
         async: false,
         expression: false,
-        params: expression.params.map<ESTree.Identifier>((param) => ({
-          type: "Identifier",
-          name: param,
-        })),
+        params: expression.params.map<ESTree.Identifier>((param) => {
+          assertNameIsString(
+            param,
+            "Cannot compile placeholder in function parameter"
+          );
+          return {
+            type: "Identifier",
+            name: param,
+          };
+        }),
         body: {
           type: "BlockStatement",
           body: expression.body.body.map((statement) =>
