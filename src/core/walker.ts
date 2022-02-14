@@ -20,6 +20,7 @@ export interface BaseWalkObject {
 }
 
 export class InsertError extends Error {}
+export class ReplaceError extends Error {}
 
 export class WalkNode implements BaseWalkObject {
   readonly kind = "node";
@@ -33,19 +34,38 @@ export class WalkNode implements BaseWalkObject {
     readonly walker: Walker
   ) {}
 
-  insertBefore(node: ast.Node) {
+  insertBefore(...nodes: ast.Node[]) {
     if (this.parent == null) {
       throw new InsertError("Cannot insert before a root node");
     }
     if (this.property == null) {
-      throw new InsertError("Cannot insert, non-propertied node");
+      throw new InsertError("Cannot insert non-propertied node");
     }
     if (this.index == null) {
-      throw new InsertError("Cannot insert, non-indexed node");
+      throw new InsertError("Cannot insert non-indexed node");
     }
     const children = (this.parent.value as any)[this.property] as any[];
-    this.parent.shift++; // shift the accounting of the traversal algorithm
-    children.splice(this.index, 0, node);
+    this.parent.shift += nodes.length; // shift the accounting of the traversal algorithm
+    children.splice(this.index, 0, ...nodes);
+  }
+
+  replace(node: ast.Node) {
+    if (this.parent == null) {
+      throw new ReplaceError("Cannot replace a root node");
+    }
+    if (this.property == null) {
+      throw new ReplaceError("Cannot replace non-propertied node");
+    }
+
+    if (this.index == null) {
+      // Property replacement
+      (this.parent.value as any)[this.property] = node;
+    } else {
+      // Child replacement
+      (this.parent.value as any)[this.property][
+        this.index + this.parent.shift
+      ] = node;
+    }
   }
 }
 

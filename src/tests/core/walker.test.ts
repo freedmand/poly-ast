@@ -416,7 +416,7 @@ function extractDeclarations(program: ast.Program): ast.Name[] {
 function insertStatementBeforeDeclaration(
   program: ast.Program,
   name: ast.Name,
-  statement: ast.Statement
+  statements: ast.Statement[]
 ): ast.Name[] {
   // Scans the source program until it finds a declaration statement with the specified name.
   // Then it will insert the statement before that declaration statement.
@@ -435,7 +435,47 @@ function insertStatementBeforeDeclaration(
           throw new Error(`${String(name)} found more than once`);
         }
         // Insert the statement
-        walkObject.insertBefore(statement);
+        walkObject.insertBefore(...statements);
+        found = true;
+      }
+      // Insert the declaration
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        declarations.push(walkObject.value.name);
+      }
+    },
+  });
+  if (!found) {
+    throw new Error(`${String(name)} not found`);
+  }
+  return declarations;
+}
+
+function replaceDeclaration(
+  program: ast.Program,
+  name: ast.Name,
+  statement: ast.Statement
+): ast.Name[] {
+  // Scans the source program until it finds a declaration statement with the specified name.
+  // Then it will replace the declaration statement with the specified statement.
+  // If no declaration statement is found or the same on is found twice, an error is thrown.
+  // Returns all the declaration names encountered in order via the walk function.
+  let found = false;
+  const declarations: ast.Name[] = [];
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement" &&
+        walkObject.value.name == name
+      ) {
+        if (found) {
+          throw new Error(`${String(name)} found more than once`);
+        }
+        // Insert the statement
+        walkObject.replace(statement);
         found = true;
       }
       // Insert the declaration
@@ -464,11 +504,9 @@ function parseStatement(code: string): ast.Statement {
 
 test("insert before first statement", () => {
   const program = insertTestProgram();
-  const declarations = insertStatementBeforeDeclaration(
-    program,
-    "x",
-    parseStatement("let a = 0;")
-  );
+  const declarations = insertStatementBeforeDeclaration(program, "x", [
+    parseStatement("let a = 0;"),
+  ]);
   expect(declarations).toEqual(["x", "y", "z"]);
 
   // Expect new declarations to have "a" inserted before "x"
@@ -489,11 +527,9 @@ test("insert before first statement", () => {
 
 test("insert before second statement", () => {
   const program = insertTestProgram();
-  const declarations = insertStatementBeforeDeclaration(
-    program,
-    "y",
-    parseStatement("let a = 0;")
-  );
+  const declarations = insertStatementBeforeDeclaration(program, "y", [
+    parseStatement("let a = 0;"),
+  ]);
   expect(declarations).toEqual(["x", "y", "z"]);
 
   // Expect new declarations to have "a" inserted before "y"
@@ -514,11 +550,9 @@ test("insert before second statement", () => {
 
 test("insert before third statement", () => {
   const program = insertTestProgram();
-  const declarations = insertStatementBeforeDeclaration(
-    program,
-    "z",
-    parseStatement("let a = 0;")
-  );
+  const declarations = insertStatementBeforeDeclaration(program, "z", [
+    parseStatement("let a = 0;"),
+  ]);
   expect(declarations).toEqual(["x", "y", "z"]);
 
   // Expect new declarations to have "a" inserted before "z"
@@ -530,6 +564,197 @@ test("insert before third statement", () => {
         let x = 1;
         let y = 2;
         let a = 0;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("insert twice before first statement", () => {
+  const program = insertTestProgram();
+  const declarations = insertStatementBeforeDeclaration(program, "x", [
+    parseStatement("let a = 0;"),
+    parseStatement("let b = 0;"),
+  ]);
+  expect(declarations).toEqual(["x", "y", "z"]);
+
+  // Expect new declarations to have "a" inserted before "z"
+  expect(extractDeclarations(program)).toEqual(["a", "b", "x", "y", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let a = 0;
+        let b = 0;
+        let x = 1;
+        let y = 2;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("insert twice before last statement", () => {
+  const program = insertTestProgram();
+  const declarations = insertStatementBeforeDeclaration(program, "z", [
+    parseStatement("let a = 0;"),
+    parseStatement("let b = 0;"),
+  ]);
+  expect(declarations).toEqual(["x", "y", "z"]);
+
+  // Expect new declarations to have "a" inserted before "z"
+  expect(extractDeclarations(program)).toEqual(["x", "y", "a", "b", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x = 1;
+        let y = 2;
+        let a = 0;
+        let b = 0;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("replace first statement", () => {
+  const program = insertTestProgram();
+  const declarations = replaceDeclaration(
+    program,
+    "x",
+    parseStatement("let a = 0;")
+  );
+  expect(declarations).toEqual(["x", "y", "z"]);
+
+  // Expect new declarations to have "x" replaced with "a"
+  expect(extractDeclarations(program)).toEqual(["a", "y", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let a = 0;
+        let y = 2;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("replace last statement", () => {
+  const program = insertTestProgram();
+  const declarations = replaceDeclaration(
+    program,
+    "z",
+    parseStatement("let a = 0;")
+  );
+  expect(declarations).toEqual(["x", "y", "z"]);
+
+  // Expect new declarations to have "x" replaced with "a"
+  expect(extractDeclarations(program)).toEqual(["x", "y", "a"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x = 1;
+        let y = 2;
+        let a = 0;
+      `,
+      true
+    )
+  );
+});
+
+test("replace and insert complex 1", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        // Insert and replace depending on variable
+        if (walkObject.value.name == "x") {
+          walkObject.insertBefore(
+            parseStatement("let x1 = 0"),
+            parseStatement("let x2 = 0")
+          );
+          walkObject.replace(parseStatement("let x3 = 0"));
+        } else if (walkObject.value.name == "z") {
+          walkObject.replace(parseStatement("let z3 = 0"));
+          walkObject.insertBefore(
+            parseStatement("let z1 = 0"),
+            parseStatement("let z2 = 0")
+          );
+        }
+      }
+    },
+  });
+
+  // Expect new declarations to have many nodes inserted/replaced
+  expect(extractDeclarations(program)).toEqual([
+    "x1",
+    "x2",
+    "x3",
+    "y",
+    "z1",
+    "z2",
+    "z3",
+  ]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x1 = 0;
+        let x2 = 0;
+        let x3 = 0;
+        let y = 2;
+        let z1 = 0;
+        let z2 = 0;
+        let z3 = 0;
+      `,
+      true
+    )
+  );
+});
+
+test("replace and insert complex 2", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        // Insert and replace depending on variable
+        if (walkObject.value.name == "x") {
+          walkObject.insertBefore(parseStatement("let x1 = 0"));
+          walkObject.replace(parseStatement("let x2 = 0"));
+        } else if (walkObject.value.name == "y") {
+          walkObject.replace(parseStatement("let y1 = 0"));
+        } else if (walkObject.value.name == "z") {
+          walkObject.insertBefore(parseStatement("let zPre = 0"));
+        }
+      }
+    },
+  });
+
+  // Expect new declarations to have many nodes inserted/replaced
+  expect(extractDeclarations(program)).toEqual(["x1", "x2", "y1", "zPre", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x1 = 0;
+        let x2 = 0;
+        let y1 = 0;
+        let zPre = 0;
         let z = 3;
       `,
       true
