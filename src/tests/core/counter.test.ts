@@ -20,13 +20,9 @@
 import { compile } from "../../core/compile";
 import { parseToAst } from "../../js/parse";
 import counterSource from "./counter.source.js";
-import {
-  ConsolidatedHtmlFile,
-  consolidatedHtmlFileToString,
-  emptyCss,
-} from "../../core/output";
+import { ConsolidatedHtmlFile, emptyCss } from "../../core/output";
 import { programToSource } from "../../js/translate";
-import util from "util";
+// import util from "util";
 
 test("counter", () => {
   const program = parseToAst(counterSource, true);

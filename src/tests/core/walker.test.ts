@@ -381,3 +381,158 @@ test("parent path", async () => {
     ["BlockStatement", null, null],
   ]);
 });
+
+// A reusable program ast (specified as a closure
+// since it gets modified in-place)
+const insertTestProgram = () =>
+  parseToAst(
+    `
+    let x = 1;
+    let y = 2;
+    let z = 3;
+  `,
+    true
+  );
+
+function extractDeclarations(program: ast.Program): ast.Name[] {
+  // Extract the names of all the declarations in a program
+  // in the order they occur
+  const declarations: ast.Name[] = [];
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        declarations.push(walkObject.value.name);
+      }
+    },
+  });
+
+  return declarations;
+}
+
+function insertStatementBeforeDeclaration(
+  program: ast.Program,
+  name: ast.Name,
+  statement: ast.Statement
+): ast.Name[] {
+  // Scans the source program until it finds a declaration statement with the specified name.
+  // Then it will insert the statement before that declaration statement.
+  // If no declaration statement is found or the same on is found twice, an error is thrown.
+  // Returns all the declaration names encountered in order via the walk function.
+  let found = false;
+  const declarations: ast.Name[] = [];
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement" &&
+        walkObject.value.name == name
+      ) {
+        if (found) {
+          throw new Error(`${String(name)} found more than once`);
+        }
+        // Insert the statement
+        walkObject.insertBefore(statement);
+        found = true;
+      }
+      // Insert the declaration
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        declarations.push(walkObject.value.name);
+      }
+    },
+  });
+  if (!found) {
+    throw new Error(`${String(name)} not found`);
+  }
+  return declarations;
+}
+
+function parseStatement(code: string): ast.Statement {
+  // Extracts a single statement from code containing a statement
+  const program = parseToAst(code, true);
+  if (program.body.length != 1) {
+    throw new Error("Expected a single statement");
+  }
+  return program.body[0];
+}
+
+test("insert before first statement", () => {
+  const program = insertTestProgram();
+  const declarations = insertStatementBeforeDeclaration(
+    program,
+    "x",
+    parseStatement("let a = 0;")
+  );
+  expect(declarations).toEqual(["x", "y", "z"]);
+
+  // Expect new declarations to have "a" inserted before "x"
+  expect(extractDeclarations(program)).toEqual(["a", "x", "y", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let a = 0;
+        let x = 1;
+        let y = 2;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("insert before second statement", () => {
+  const program = insertTestProgram();
+  const declarations = insertStatementBeforeDeclaration(
+    program,
+    "y",
+    parseStatement("let a = 0;")
+  );
+  expect(declarations).toEqual(["x", "y", "z"]);
+
+  // Expect new declarations to have "a" inserted before "y"
+  expect(extractDeclarations(program)).toEqual(["x", "a", "y", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x = 1;
+        let a = 0;
+        let y = 2;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("insert before third statement", () => {
+  const program = insertTestProgram();
+  const declarations = insertStatementBeforeDeclaration(
+    program,
+    "z",
+    parseStatement("let a = 0;")
+  );
+  expect(declarations).toEqual(["x", "y", "z"]);
+
+  // Expect new declarations to have "a" inserted before "z"
+  expect(extractDeclarations(program)).toEqual(["x", "y", "a", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x = 1;
+        let y = 2;
+        let a = 0;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});

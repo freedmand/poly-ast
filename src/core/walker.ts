@@ -19,10 +19,40 @@ export interface BaseWalkObject {
   walker: Walker;
 }
 
-export interface WalkNode extends BaseWalkObject {
-  kind: "node";
-  value: ast.Node;
+export class InsertError extends Error {}
+
+export class WalkNode implements BaseWalkObject {
+  readonly kind = "node";
+  public shift = 0;
+
+  constructor(
+    readonly value: ast.Node,
+    readonly parent: WalkNode | null,
+    readonly property: string | null,
+    readonly index: number | null,
+    readonly walker: Walker
+  ) {}
+
+  insertBefore(node: ast.Node) {
+    if (this.parent == null) {
+      throw new InsertError("Cannot insert before a root node");
+    }
+    if (this.property == null) {
+      throw new InsertError("Cannot insert, non-propertied node");
+    }
+    if (this.index == null) {
+      throw new InsertError("Cannot insert, non-indexed node");
+    }
+    const children = (this.parent.value as any)[this.property] as any[];
+    this.parent.shift++; // shift the accounting of the traversal algorithm
+    children.splice(this.index, 0, node);
+  }
 }
+
+// export interface WalkNode extends BaseWalkObject {
+//   kind: "node";
+//   value: ast.Node;
+// }
 
 export interface WalkValue extends BaseWalkObject {
   kind: "value";
@@ -36,14 +66,7 @@ export function walkNode(
   index: number | null,
   walker: Walker
 ): WalkNode {
-  return {
-    kind: "node",
-    parent,
-    property,
-    index,
-    walker,
-    value: node,
-  };
+  return new WalkNode(node, parent, property, index, walker);
 }
 
 type NotNode<T> = T extends ast.Node ? never : T;
@@ -125,6 +148,10 @@ export function walk(node: ast.Node, walker: Walker) {
   ): null {
     for (let i = 0; i < array.length; i++) {
       visit(walkNode(array[i], nodeObject, property, i, walker));
+      if (nodeObject.shift > 0) {
+        i += nodeObject.shift;
+        nodeObject.shift = 0;
+      }
     }
     return null;
   }
@@ -329,7 +356,7 @@ export function walk(node: ast.Node, walker: Walker) {
     }
   }
 
-  function visit<Parent extends ast.Node>(walkObject: WalkObject): null {
+  function visit(walkObject: WalkObject): null {
     const walkContext = new WalkContext();
 
     // Enter the node
