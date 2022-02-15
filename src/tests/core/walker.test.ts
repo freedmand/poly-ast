@@ -1247,7 +1247,7 @@ test("reactive insertion", () => {
       ) {
         // We're at this statement: let b = a + 1
         // Let's replace with a setter
-        walkObject.insertBefore(parseStatement(`let b = 0;`));
+        walkObject.insertBefore(parseStatement(`let b;`));
         walkObject.insertBefore(
           parseStatement(`let setB = () => {
           b = a + 1;
@@ -1272,7 +1272,7 @@ test("reactive insertion", () => {
   expect(program).toEqual(
     parseToAst(`
     let a = 0;
-    let b = 0;
+    let b;
     let setB = () => {
       b = a + 1;
     };
@@ -1303,7 +1303,7 @@ test("reactive insertion complex", () => {
           walkObject,
           "DeclareStatement"
         );
-        declareNode.insertBefore(parseStatement("let a = 0;"));
+        declareNode.insertBefore(parseStatement("let a;"));
         declareNode.replace(
           parseStatement(`let setA = () => {
             a = x + 1;
@@ -1320,7 +1320,7 @@ test("reactive insertion complex", () => {
         // As we leave `getXPlus`, make it reactive by setting
         // `y` above, wrapping a function to assign it, and adding
         // a setter call below
-        walkObject.insertBefore(parseStatement("let y = 0"));
+        walkObject.insertBefore(parseStatement("let y;"));
         walkObject.replace({
           type: "DeclareStatement",
           name: "setY",
@@ -1357,10 +1357,10 @@ test("reactive insertion complex", () => {
   expect(program).toEqual(
     parseToAst(`
     let x = 1;
-    let y = 0;
+    let y;
     let setY = () => {
       let getXPlus = () => {
-        let a = 0;
+        let a;
         let setA = () => {
           a = x + 1;
         }

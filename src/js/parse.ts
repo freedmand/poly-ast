@@ -63,12 +63,8 @@ export function statementToAst(statement: ESTree.Statement): ast.Statement {
         throw new NotSupported("Variable declarators must be identifiers");
       }
       const name = declarator.id.name;
-      if (declarator.init == null) {
-        throw new NotSupported(
-          "Variable declarator expressions must be non-null"
-        );
-      }
-      const expression = expressionToAst(declarator.init);
+      const expression =
+        declarator.init == null ? null : expressionToAst(declarator.init);
       return { type: "DeclareStatement", name, value: expression };
     case "ReturnStatement":
       if (statement.argument == null) {
@@ -372,7 +368,7 @@ export function stripWhitespaceLiteralNode<T extends ESTree.Node>(
         if (strippedNode != null) newArray.push(strippedNode);
       }
       output[key] = newArray as any;
-    } else if (typeof value == "object" && "type" in value) {
+    } else if (value != null && typeof value == "object" && "type" in value) {
       output[key] = stripWhitespaceLiteralNode(value as any);
     }
   }

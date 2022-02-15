@@ -234,7 +234,7 @@ export function walk(node: ast.Node, walker: Walker<WalkObject>) {
             case "name":
               return visit(walkValue(node.name, nodeObject, "name", null));
             case "value":
-              return visit(walkNode(node.value, nodeObject, "value", null));
+              return visit(walkNull(node.value, nodeObject, "value", null));
           }
         });
       case "ReturnStatement":

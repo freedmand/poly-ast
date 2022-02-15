@@ -56,7 +56,10 @@ export function statementToESTree(statement: ast.Statement): ESTree.Statement {
               type: "Identifier",
               name: statement.name,
             },
-            init: expressionToESTree(statement.value),
+            init:
+              statement.value == null
+                ? null
+                : expressionToESTree(statement.value),
           },
         ],
       };

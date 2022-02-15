@@ -61,7 +61,10 @@ export function optimizeStatement(
     case "BlockStatement":
       return optimize(statement);
     case "DeclareStatement":
-      statement.value = optimizeExpression(context, statement.value);
+      statement.value =
+        statement.value == null
+          ? null
+          : optimizeExpression(context, statement.value);
       return statement;
     case "ReturnStatement":
       if (statement.value != null) {

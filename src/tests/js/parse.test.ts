@@ -1,4 +1,5 @@
 import simpleSource from "./simple.source.js";
+import nullAndUndefinedSource from "./nullAndUndefined.source.js";
 import { parse, parseToAst } from "../../js/parse";
 import { programToSource } from "../../js/translate";
 
@@ -49,4 +50,9 @@ test("estree parsing", () => {
 test("source reconstruction", () => {
   const ast = parseToAst(simpleSource);
   expect(programToSource(ast)).toEqual(simpleSource);
+});
+
+test("null and undefined source reconstruction", () => {
+  const ast = parseToAst(nullAndUndefinedSource);
+  expect(programToSource(ast)).toEqual(nullAndUndefinedSource);
 });

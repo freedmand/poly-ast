@@ -33,7 +33,7 @@ export type BlockStatement = {
 export type DeclareStatement = {
   type: "DeclareStatement";
   name: Name;
-  value: Expression;
+  value: Expression | null;
 };
 
 export type ReturnStatement = {

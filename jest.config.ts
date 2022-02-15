@@ -26,6 +26,7 @@ const config: Config.InitialOptions = {
           ".source.js": "text",
           ".dest.js": "text",
         },
+        sourcemap: "both",
       },
     ],
   },

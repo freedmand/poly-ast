@@ -115,7 +115,10 @@ export function compileStatement(statement: ast.Statement): ESTree.Statement {
               type: "Identifier",
               name: statement.name,
             },
-            init: compileExpression(statement.value),
+            init:
+              statement.value == null
+                ? null
+                : compileExpression(statement.value),
           },
         ],
       };
