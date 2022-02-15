@@ -5,9 +5,9 @@
 
 import * as ast from "./ast";
 
-export interface Walker {
-  enter(object: WalkObject): void;
-  leave?(object: WalkObject): void;
+export interface Walker<T extends WalkObject> {
+  enter?(object: T): void;
+  leave?(object: T): void;
 }
 
 export type WalkObject = WalkNode | WalkValue;
@@ -16,7 +16,6 @@ export interface BaseWalkObject {
   parent: WalkNode | null;
   property: string | null;
   index: number | null;
-  walker: Walker;
 }
 
 export class InsertBeforeError extends Error {}
@@ -24,19 +23,19 @@ export class InsertAfterError extends Error {}
 export class ReplaceError extends Error {}
 export class RemoveError extends Error {}
 
-export class WalkNode implements BaseWalkObject {
+export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
   readonly kind = "node";
   public shift = 0;
   public preShift = 0;
   public postShift = 0;
   public removed = false;
+  public skipped = false;
 
   constructor(
-    readonly value: ast.Node,
-    readonly parent: WalkNode | null,
+    readonly value: T,
+    readonly parent: BaseWalkNode<ast.Node> | null,
     readonly property: string | null,
-    readonly index: number | null,
-    readonly walker: Walker
+    readonly index: number | null
   ) {}
 
   _resetState() {
@@ -44,6 +43,7 @@ export class WalkNode implements BaseWalkObject {
     this.preShift = 0;
     this.postShift = 0;
     this.removed = false;
+    this.skipped = false;
   }
 
   insertBefore(...nodes: ast.Node[]) {
@@ -123,8 +123,15 @@ export class WalkNode implements BaseWalkObject {
     children.splice(this.index + this.parent.shift, 1);
     this.parent.shift--;
     this.removed = true;
+    this.skipped = true;
+  }
+
+  skip() {
+    this.skipped = true;
   }
 }
+
+export class WalkNode extends BaseWalkNode<ast.Node> {}
 
 export interface WalkValue extends BaseWalkObject {
   kind: "value";
@@ -135,10 +142,9 @@ export function walkNode(
   node: ast.Node,
   parent: WalkNode | null,
   property: string | null,
-  index: number | null,
-  walker: Walker
+  index: number | null
 ): WalkNode {
-  return new WalkNode(node, parent, property, index, walker);
+  return new WalkNode(node, parent, property, index);
 }
 
 type NotNode<T> = T extends ast.Node ? never : T;
@@ -148,28 +154,25 @@ export function walkValue<T>(
   value: NotNode<T>,
   parent: WalkNode | null,
   property: string | null,
-  index: number | null,
-  walker: Walker
+  index: number | null
 ): WalkValue {
   return {
     kind: "value",
     parent,
     property,
     index,
-    walker,
     value,
   };
 }
 
-export function walkNull<T>(
+export function walkNull(
   node: ast.Node | null,
   parent: WalkNode | null,
   property: string | null,
-  index: number | null,
-  walker: Walker
+  index: number | null
 ): WalkObject {
-  if (node == null) return walkValue(null, parent, property, index, walker);
-  return walkNode(node, parent, property, index, walker);
+  if (node == null) return walkValue(null, parent, property, index);
+  return walkNode(node, parent, property, index);
 }
 
 type ExcludeType<T> = Exclude<keyof T, "type" | number | symbol>;
@@ -186,40 +189,16 @@ function nodeKeyMap<T extends ast.Node>(
   return null;
 }
 
-class WalkContext {
-  public skipped = false;
-  // TODO: remove/replaced
-  // public removed = false;
-  // public replaced = false;
-  // public replaceObject: WalkObject | null = null;
-
-  constructor() {}
-
-  skip() {
-    this.skipped = true;
-  }
-
-  // // TODO: remove and replace methods
-  // remove() {
-  //   this.removed = true;
-  // }
-
-  // replace(replaceObject: WalkObject) {
-  //   this.replaced = true;
-  //   this.replaceObject = replaceObject;
-  // }
-}
-
-export function walk(node: ast.Node, walker: Walker) {
+export function walk(node: ast.Node, walker: Walker<WalkObject>) {
   // Set up helper functions
   function visitArrayNode<T extends ast.Node, U extends ExcludeType<T>>(
     nodeObject: WalkNode,
-    node: T,
+    _node: T,
     property: U,
     array: Array<ast.Node>
   ): null {
     for (let i = 0; i < array.length; i++) {
-      visit(walkNode(array[i], nodeObject, property, i, walker));
+      visit(walkNode(array[i], nodeObject, property, i));
       i += nodeObject.shift + nodeObject.postShift;
       nodeObject._resetState();
     }
@@ -233,7 +212,7 @@ export function walk(node: ast.Node, walker: Walker) {
     array: Array<any>
   ): null {
     for (let i = 0; i < array.length; i++) {
-      visit(walkValue(array[i], nodeObject, property, i, walker));
+      visit(walkValue(array[i], nodeObject, property, i));
     }
     return null;
   }
@@ -253,31 +232,23 @@ export function walk(node: ast.Node, walker: Walker) {
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "name":
-              return visit(
-                walkValue(node.name, nodeObject, "name", null, walker)
-              );
+              return visit(walkValue(node.name, nodeObject, "name", null));
             case "value":
-              return visit(
-                walkNode(node.value, nodeObject, "value", null, walker)
-              );
+              return visit(walkNode(node.value, nodeObject, "value", null));
           }
         });
       case "ReturnStatement":
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "value":
-              return visit(
-                walkNull(node.value, nodeObject, "value", null, walker)
-              );
+              return visit(walkNull(node.value, nodeObject, "value", null));
           }
         });
       case "ExpressionStatement":
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "value":
-              return visit(
-                walkNode(node.value, nodeObject, "value", null, walker)
-              );
+              return visit(walkNode(node.value, nodeObject, "value", null));
           }
         });
       // Expressions
@@ -285,53 +256,39 @@ export function walk(node: ast.Node, walker: Walker) {
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "value":
-              return visit(
-                walkValue(node.value, nodeObject, "value", null, walker)
-              );
+              return visit(walkValue(node.value, nodeObject, "value", null));
           }
         });
       case "Identifier":
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "name":
-              return visit(
-                walkValue(node.name, nodeObject, "name", null, walker)
-              );
+              return visit(walkValue(node.name, nodeObject, "name", null));
           }
         });
       case "Plus":
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "left":
-              return visit(
-                walkNode(node.left, nodeObject, "left", null, walker)
-              );
+              return visit(walkNode(node.left, nodeObject, "left", null));
             case "right":
-              return visit(
-                walkNode(node.right, nodeObject, "right", null, walker)
-              );
+              return visit(walkNode(node.right, nodeObject, "right", null));
           }
         });
       case "Assign":
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "left":
-              return visit(
-                walkNode(node.left, nodeObject, "left", null, walker)
-              );
+              return visit(walkNode(node.left, nodeObject, "left", null));
             case "right":
-              return visit(
-                walkNode(node.right, nodeObject, "right", null, walker)
-              );
+              return visit(walkNode(node.right, nodeObject, "right", null));
           }
         });
       case "Reactive":
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "value":
-              return visit(
-                walkNode(node.value, nodeObject, "value", null, walker)
-              );
+              return visit(walkNode(node.value, nodeObject, "value", null));
           }
         });
       case "List":
@@ -345,9 +302,7 @@ export function walk(node: ast.Node, walker: Walker) {
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "tag":
-              return visit(
-                walkValue(node.tag, nodeObject, "tag", null, walker)
-              );
+              return visit(walkValue(node.tag, nodeObject, "tag", null));
             case "attributes":
               return visitArrayNode(
                 nodeObject,
@@ -368,31 +323,19 @@ export function walk(node: ast.Node, walker: Walker) {
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "key":
-              return visit(
-                walkValue(node.key, nodeObject, "key", null, walker)
-              );
+              return visit(walkValue(node.key, nodeObject, "key", null));
             case "value":
-              return visit(
-                walkNull(node.value, nodeObject, "value", null, walker)
-              );
+              return visit(walkNull(node.value, nodeObject, "value", null));
           }
         });
       case "EventAttribute":
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "event":
-              return visit(
-                walkValue(node.event, nodeObject, "event", null, walker)
-              );
+              return visit(walkValue(node.event, nodeObject, "event", null));
             case "eventHandler":
               return visit(
-                walkNode(
-                  node.eventHandler,
-                  nodeObject,
-                  "eventHandler",
-                  null,
-                  walker
-                )
+                walkNode(node.eventHandler, nodeObject, "eventHandler", null)
               );
           }
         });
@@ -402,18 +345,14 @@ export function walk(node: ast.Node, walker: Walker) {
             case "params":
               return visitArrayValue(nodeObject, node, "params", node.params);
             case "body":
-              return visit(
-                walkNode(node.body, nodeObject, "body", null, walker)
-              );
+              return visit(walkNode(node.body, nodeObject, "body", null));
           }
         });
       case "Call":
         return nodeKeyMap(node, (key) => {
           switch (key) {
             case "func":
-              return visit(
-                walkNode(node.func, nodeObject, "func", null, walker)
-              );
+              return visit(walkNode(node.func, nodeObject, "func", null));
             case "arguments":
               return visitArrayNode(
                 nodeObject,
@@ -427,25 +366,27 @@ export function walk(node: ast.Node, walker: Walker) {
   }
 
   function visit(walkObject: WalkObject): null {
-    const walkContext = new WalkContext();
-
     // Enter the node
-    walker.enter.call(walkContext, walkObject);
+    if (walker.enter != null) {
+      walker.enter(walkObject);
+    }
     // Removed or skipped
-    if (walkContext.skipped) {
+    if (walkObject.kind == "node" && walkObject.skipped) {
       return null;
     }
-    // TODO: remove/replace
 
+    // Traverse if not removed/skipped
     if (walkObject.kind == "node") {
       traverse(walkObject);
     }
+
+    // Leave the node
     if (walker.leave != null) {
-      walker.leave.call(walkContext, walkObject);
+      walker.leave(walkObject);
     }
     return null;
   }
 
   // Begin by visiting the passed in node
-  visit(walkNode(node, null, null, null, walker));
+  visit(walkNode(node, null, null, null));
 }

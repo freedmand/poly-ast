@@ -37,7 +37,7 @@ export function constantAdd(left: Literal, right: Literal): Expression {
 }
 
 export function optimizeExpression(
-  context: Context,
+  _context: Context,
   expression: Expression
 ): Expression {
   switch (expression.type) {

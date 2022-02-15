@@ -20,14 +20,15 @@
 import { compile } from "../../core/compile";
 import { parseToAst } from "../../js/parse";
 import counterSource from "./counter.source.js";
-import { ConsolidatedHtmlFile, emptyCss } from "../../core/output";
+import {
+  ConsolidatedHtmlFile,
+  consolidatedHtmlFileToString,
+  emptyCss,
+} from "../../core/output";
 import { programToSource } from "../../js/translate";
-// import util from "util";
 
-test("counter", () => {
-  const program = parseToAst(counterSource, true);
-  // console.log(util.inspect(program, false, null, true));
-  // TODO: test functional counter app
+test("counter program parses", () => {
+  expect(() => parseToAst(counterSource, true)).not.toThrow();
 });
 
 test("source reconstruction", () => {
@@ -43,4 +44,5 @@ test("compile", () => {
     css: emptyCss,
     javascript: jsProgram,
   };
+  expect(consolidatedHtmlFileToString(file).length).toBeGreaterThan(0);
 });

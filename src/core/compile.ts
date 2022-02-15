@@ -7,7 +7,7 @@
 import { ESTree } from "meriyah";
 import { parse } from "../js/parse";
 import * as ast from "./ast";
-import { assertNameIsString, NotSupported, PlaceholderError } from "./util";
+import { assertNameIsString, NotSupported } from "./util";
 
 const dom = "POLY_dom";
 const domAppend = "POLY_domAppend";

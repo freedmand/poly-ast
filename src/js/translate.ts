@@ -7,7 +7,7 @@ import { ESTree } from "meriyah";
 import { generate, baseGenerator } from "astring";
 import { JsxGenerator } from "astring-jsx";
 import prettier from "prettier";
-import { assertNameIsString, PlaceholderError } from "../core/util";
+import { assertNameIsString } from "../core/util";
 
 const extendedGenerator = { ...JsxGenerator, ...baseGenerator };
 
