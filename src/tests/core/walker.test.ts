@@ -1,4 +1,4 @@
-import { walk, WalkNode, WalkObject } from "../../core/walker";
+import { RemoveError, walk, WalkNode, WalkObject } from "../../core/walker";
 import { parseToAst } from "../../js/parse";
 import * as ast from "../../core/ast";
 import counterSource from "./counter.source.js";
@@ -384,15 +384,12 @@ test("parent path", async () => {
 
 // A reusable program ast (specified as a closure
 // since it gets modified in-place)
-const insertTestProgram = () =>
-  parseToAst(
-    `
-    let x = 1;
-    let y = 2;
-    let z = 3;
-  `,
-    true
-  );
+const rawTestProgram = `
+  let x = 1;
+  let y = 2;
+  let z = 3;
+`;
+const insertTestProgram = () => parseToAst(rawTestProgram, true);
 
 function extractDeclarations(program: ast.Program): ast.Name[] {
   // Extract the names of all the declarations in a program
@@ -423,7 +420,8 @@ function insertStatementBeforeDeclaration(
   // If no declaration statement is found or the same on is found twice, an error is thrown.
   // Returns all the declaration names encountered in order via the walk function.
   let found = false;
-  const declarations: ast.Name[] = [];
+  const startDeclarations: ast.Name[] = [];
+  const endDeclarations: ast.Name[] = [];
   walk(program, {
     enter(walkObject) {
       if (
@@ -443,14 +441,25 @@ function insertStatementBeforeDeclaration(
         walkObject.kind == "node" &&
         walkObject.value.type == "DeclareStatement"
       ) {
-        declarations.push(walkObject.value.name);
+        startDeclarations.push(walkObject.value.name);
+      }
+    },
+    leave(walkObject) {
+      // Insert the declaration
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        endDeclarations.push(walkObject.value.name);
       }
     },
   });
   if (!found) {
     throw new Error(`${String(name)} not found`);
   }
-  return declarations;
+  // Expect the declarations to match up
+  expect(startDeclarations).toEqual(endDeclarations);
+  return startDeclarations;
 }
 
 function replaceDeclaration(
@@ -691,6 +700,10 @@ test("replace and insert complex 1", () => {
             parseStatement("let z1 = 0"),
             parseStatement("let z2 = 0")
           );
+        } else if (walkObject.value.name != "y") {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
         }
       }
     },
@@ -735,18 +748,182 @@ test("replace and insert complex 2", () => {
         // Insert and replace depending on variable
         if (walkObject.value.name == "x") {
           walkObject.insertBefore(parseStatement("let x1 = 0"));
-          walkObject.replace(parseStatement("let x2 = 0"));
+          walkObject.replace(
+            parseStatement("let x2 = 0"),
+            parseStatement("let x3 = 0")
+          );
         } else if (walkObject.value.name == "y") {
-          walkObject.replace(parseStatement("let y1 = 0"));
+          walkObject.replace(
+            parseStatement("let y1 = 0"),
+            parseStatement("let y2 = 0")
+          );
         } else if (walkObject.value.name == "z") {
           walkObject.insertBefore(parseStatement("let zPre = 0"));
+        } else {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
         }
       }
     },
   });
 
   // Expect new declarations to have many nodes inserted/replaced
-  expect(extractDeclarations(program)).toEqual(["x1", "x2", "y1", "zPre", "z"]);
+  expect(extractDeclarations(program)).toEqual([
+    "x1",
+    "x2",
+    "x3",
+    "y1",
+    "y2",
+    "zPre",
+    "z",
+  ]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x1 = 0;
+        let x2 = 0;
+        let x3 = 0;
+        let y1 = 0;
+        let y2 = 0;
+        let zPre = 0;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("replace and insert complex 3", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        // Insert and replace depending on variable
+        if (walkObject.value.name == "x") {
+          walkObject.replace();
+        } else if (walkObject.value.name == "y") {
+          walkObject.replace();
+        } else if (walkObject.value.name == "z") {
+          walkObject.insertBefore(parseStatement("let zPre = 0"));
+        } else {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
+        }
+      }
+    },
+  });
+
+  // Expect new declarations to have many nodes inserted/replaced
+  expect(extractDeclarations(program)).toEqual(["zPre", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let zPre = 0;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("replace and insert complex 4", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        // Insert and replace depending on variable
+        if (walkObject.value.name == "x") {
+          walkObject.remove();
+        } else if (walkObject.value.name == "y") {
+          walkObject.remove();
+        } else if (walkObject.value.name == "z") {
+          walkObject.insertBefore(parseStatement("let zPre = 0"));
+        } else {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
+        }
+      }
+    },
+  });
+
+  // Expect new declarations to have many nodes inserted/replaced
+  expect(extractDeclarations(program)).toEqual(["zPre", "z"]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let zPre = 0;
+        let z = 3;
+      `,
+      true
+    )
+  );
+});
+
+test("replace and insert complex 5", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        // Insert and replace depending on variable
+        if (walkObject.value.name == "x") {
+          walkObject.remove();
+          walkObject.insertBefore(
+            parseStatement("let x1 = 0"),
+            parseStatement("let x2 = 0")
+          );
+        } else if (walkObject.value.name == "y") {
+          walkObject.insertBefore(
+            parseStatement("let y1 = 0"),
+            parseStatement("let y2 = 0")
+          );
+          walkObject.replace(
+            parseStatement("let y3 = 0"),
+            parseStatement("let y4 = 0")
+          );
+        } else if (walkObject.value.name == "z") {
+          walkObject.insertBefore(
+            parseStatement("let z1 = 0"),
+            parseStatement("let z2 = 0")
+          );
+          walkObject.remove();
+        } else {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
+        }
+      }
+    },
+  });
+
+  // Expect new declarations to have many nodes inserted/replaced
+  expect(extractDeclarations(program)).toEqual([
+    "x1",
+    "x2",
+    "y1",
+    "y2",
+    "y3",
+    "y4",
+    "z1",
+    "z2",
+  ]);
 
   expect(program).toEqual(
     parseToAst(
@@ -754,10 +931,230 @@ test("replace and insert complex 2", () => {
         let x1 = 0;
         let x2 = 0;
         let y1 = 0;
-        let zPre = 0;
-        let z = 3;
+        let y2 = 0;
+        let y3 = 0;
+        let y4 = 0;
+        let z1 = 0;
+        let z2 = 0;
       `,
       true
     )
   );
+});
+
+test("replace and insert complex 6", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        // Insert and replace depending on variable
+        if (walkObject.value.name == "x") {
+          walkObject.remove();
+          walkObject.insertAfter(
+            parseStatement("let x1 = 0"),
+            parseStatement("let x2 = 0")
+          );
+        } else if (walkObject.value.name == "y") {
+          walkObject.insertAfter(parseStatement("let y5 = 0"));
+          walkObject.insertAfter(parseStatement("let y6 = 0"));
+          walkObject.replace(
+            parseStatement("let y3 = 0"),
+            parseStatement("let y4 = 0")
+          );
+          walkObject.insertBefore(
+            parseStatement("let y1 = 0"),
+            parseStatement("let y2 = 0")
+          );
+        } else if (walkObject.value.name == "z") {
+          walkObject.insertBefore(parseStatement("let z1 = 0"));
+          walkObject.insertBefore(parseStatement("let z2 = 0"));
+          walkObject.remove();
+          walkObject.insertAfter(parseStatement("let z3 = 0"));
+        } else {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
+        }
+      }
+    },
+  });
+
+  // Expect new declarations to have many nodes inserted/replaced
+  expect(extractDeclarations(program)).toEqual([
+    "x1",
+    "x2",
+    "y1",
+    "y2",
+    "y3",
+    "y4",
+    "y5",
+    "y6",
+    "z1",
+    "z2",
+    "z3",
+  ]);
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x1 = 0;
+        let x2 = 0;
+        let y1 = 0;
+        let y2 = 0;
+        let y3 = 0;
+        let y4 = 0;
+        let y5 = 0;
+        let y6 = 0;
+        let z1 = 0;
+        let z2 = 0;
+        let z3 = 0;
+      `,
+      true
+    )
+  );
+});
+
+test("multiple insert before", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        if (walkObject.value.name == "x") {
+          walkObject.insertBefore(parseStatement("let a = 0"));
+          walkObject.insertBefore(parseStatement("let b = 0"));
+          walkObject.insertBefore(parseStatement("let c = 0"));
+        } else if (
+          walkObject.value.name != "y" &&
+          walkObject.value.name != "z"
+        ) {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
+        }
+      }
+    },
+  });
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let a = 0;
+        let b = 0;
+        let c = 0;
+        ${rawTestProgram}
+      `,
+      true
+    )
+  );
+});
+
+test("multiple insert after", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        if (walkObject.value.name == "z") {
+          walkObject.insertAfter(parseStatement("let a = 0"));
+          walkObject.insertAfter(parseStatement("let b = 0"));
+          walkObject.insertAfter(parseStatement("let c = 0"));
+        } else if (
+          walkObject.value.name != "x" &&
+          walkObject.value.name != "y"
+        ) {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
+        }
+      }
+    },
+  });
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        ${rawTestProgram}
+        let a = 0;
+        let b = 0;
+        let c = 0;
+      `,
+      true
+    )
+  );
+});
+
+test("multiple replace", () => {
+  const program = insertTestProgram();
+
+  walk(program, {
+    enter(walkObject) {
+      if (
+        walkObject.kind == "node" &&
+        walkObject.value.type == "DeclareStatement"
+      ) {
+        if (walkObject.value.name == "z") {
+          walkObject.replace(parseStatement("let a = 0"));
+          walkObject.replace(parseStatement("let b = 0"));
+          walkObject.replace(parseStatement("let c = 0"));
+        } else if (
+          walkObject.value.name != "x" &&
+          walkObject.value.name != "y"
+        ) {
+          throw new Error(
+            `Unexpected walk object ${String(walkObject.value.name)}`
+          );
+        }
+      }
+    },
+  });
+
+  expect(program).toEqual(
+    parseToAst(
+      `
+        let x = 1;
+        let y = 2;
+        let c = 0;
+      `,
+      true
+    )
+  );
+});
+
+test("multiple remove", () => {
+  const program = insertTestProgram();
+
+  expect(() =>
+    walk(program, {
+      enter(walkObject) {
+        if (
+          walkObject.kind == "node" &&
+          walkObject.value.type == "DeclareStatement"
+        ) {
+          if (walkObject.value.name == "y") {
+            walkObject.remove();
+            walkObject.remove();
+            walkObject.remove();
+          } else if (
+            walkObject.value.name != "x" &&
+            walkObject.value.name != "z"
+          ) {
+            throw new Error(
+              `Unexpected walk object ${String(walkObject.value.name)}`
+            );
+          }
+        }
+      },
+    })
+  ).toThrowError(RemoveError);
 });

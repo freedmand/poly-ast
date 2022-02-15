@@ -19,12 +19,17 @@ export interface BaseWalkObject {
   walker: Walker;
 }
 
-export class InsertError extends Error {}
+export class InsertBeforeError extends Error {}
+export class InsertAfterError extends Error {}
 export class ReplaceError extends Error {}
+export class RemoveError extends Error {}
 
 export class WalkNode implements BaseWalkObject {
   readonly kind = "node";
   public shift = 0;
+  public preShift = 0;
+  public postShift = 0;
+  public removed = false;
 
   constructor(
     readonly value: ast.Node,
@@ -34,45 +39,92 @@ export class WalkNode implements BaseWalkObject {
     readonly walker: Walker
   ) {}
 
-  insertBefore(...nodes: ast.Node[]) {
-    if (this.parent == null) {
-      throw new InsertError("Cannot insert before a root node");
-    }
-    if (this.property == null) {
-      throw new InsertError("Cannot insert non-propertied node");
-    }
-    if (this.index == null) {
-      throw new InsertError("Cannot insert non-indexed node");
-    }
-    const children = (this.parent.value as any)[this.property] as any[];
-    this.parent.shift += nodes.length; // shift the accounting of the traversal algorithm
-    children.splice(this.index, 0, ...nodes);
+  _resetState() {
+    this.shift = 0;
+    this.preShift = 0;
+    this.postShift = 0;
+    this.removed = false;
   }
 
-  replace(node: ast.Node) {
+  insertBefore(...nodes: ast.Node[]) {
     if (this.parent == null) {
-      throw new ReplaceError("Cannot replace a root node");
+      throw new InsertBeforeError("Cannot insert before root node");
+    }
+    if (this.property == null) {
+      throw new InsertBeforeError("Cannot insert before non-propertied node");
+    }
+    if (this.index == null) {
+      throw new InsertBeforeError("Cannot insert before non-indexed node");
+    }
+    const children = (this.parent.value as any)[this.property] as any[];
+    children.splice(this.index + this.parent.preShift, 0, ...nodes);
+    this.parent.shift += nodes.length; // shift the accounting of the traversal algorithm
+    this.parent.preShift += nodes.length; // shift accounting of pre-shift to handle multiple insert-befores
+  }
+
+  insertAfter(...nodes: ast.Node[]) {
+    if (this.parent == null) {
+      throw new InsertAfterError("Cannot insert after root node");
+    }
+    if (this.property == null) {
+      throw new InsertAfterError("Cannot insert after non-propertied node");
+    }
+    if (this.index == null) {
+      throw new InsertAfterError("Cannot insert after non-indexed node");
+    }
+    const children = (this.parent.value as any)[this.property] as any[];
+    children.splice(
+      this.index + this.parent.shift + this.parent.postShift + 1,
+      0,
+      ...nodes
+    );
+    this.parent.postShift += nodes.length; // shift the accounting of the traversal algorithm
+  }
+
+  replace(...nodes: ast.Node[]) {
+    if (this.parent == null) {
+      throw new ReplaceError("Cannot replace root node");
     }
     if (this.property == null) {
       throw new ReplaceError("Cannot replace non-propertied node");
     }
 
     if (this.index == null) {
+      if (nodes.length != 1) {
+        throw new ReplaceError(
+          "Can only replace a propertied node with a single node"
+        );
+      }
       // Property replacement
-      (this.parent.value as any)[this.property] = node;
+      (this.parent.value as any)[this.property] = nodes[0];
     } else {
       // Child replacement
-      (this.parent.value as any)[this.property][
-        this.index + this.parent.shift
-      ] = node;
+      const children = (this.parent.value as any)[this.property] as any[];
+      children.splice(this.index + this.parent.shift, 1, ...nodes);
+      this.parent.shift += nodes.length - 1;
     }
   }
-}
 
-// export interface WalkNode extends BaseWalkObject {
-//   kind: "node";
-//   value: ast.Node;
-// }
+  remove() {
+    if (this.parent == null) {
+      throw new RemoveError("Cannot remove root node");
+    }
+    if (this.property == null) {
+      throw new RemoveError("Cannot remove non-propertied node");
+    }
+    if (this.index == null) {
+      throw new RemoveError("Cannot remove non-indexed node");
+    }
+    if (this.removed) {
+      throw new RemoveError("Cannot remove node twice");
+    }
+
+    const children = (this.parent.value as any)[this.property] as any[];
+    children.splice(this.index + this.parent.shift, 1);
+    this.parent.shift--;
+    this.removed = true;
+  }
+}
 
 export interface WalkValue extends BaseWalkObject {
   kind: "value";
@@ -168,10 +220,8 @@ export function walk(node: ast.Node, walker: Walker) {
   ): null {
     for (let i = 0; i < array.length; i++) {
       visit(walkNode(array[i], nodeObject, property, i, walker));
-      if (nodeObject.shift > 0) {
-        i += nodeObject.shift;
-        nodeObject.shift = 0;
-      }
+      i += nodeObject.shift + nodeObject.postShift;
+      nodeObject._resetState();
     }
     return null;
   }
