@@ -1,4 +1,4 @@
-import { Name } from "./ast";
+import * as ast from "./ast";
 import { Scope } from "./scope";
 
 export const lower = "abcdefghijklmnopqrstuvwxyz";
@@ -114,7 +114,7 @@ export class Namer {
     return this.nameOptions.resolver.resolveName(name);
   }
 
-  scopeHas(scope: Scope, name: Name): boolean {
+  scopeHas(scope: Scope, name: ast.Name): boolean {
     // Returns hasImmediate if aggressive is set
     if (this.nameOptions.aggressive) {
       return scope.hasImmediate(name);

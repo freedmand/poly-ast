@@ -6,7 +6,7 @@ import {
   WalkNode,
   WalkObject,
 } from "../../core/walker";
-import { parseToAst } from "../../js/parse";
+import { parseStatement, parseToAst } from "../../js/parse";
 import * as ast from "../../core/ast";
 import counterSource from "./counter.source.js";
 
@@ -559,15 +559,6 @@ function replaceDeclaration(
     throw new Error(`${String(name)} not found`);
   }
   return declarations;
-}
-
-function parseStatement(code: string): ast.Statement {
-  // Extracts a single statement from code containing a statement
-  const program = parseToAst(code, true);
-  if (program.body.length != 1) {
-    throw new Error("Expected a single statement");
-  }
-  return program.body[0];
 }
 
 test("insert before first statement", () => {

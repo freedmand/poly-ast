@@ -38,6 +38,15 @@ export function parseToAst(code: string, stripWhitespace = false): ast.Program {
   return programToAst(parse(code, stripWhitespace));
 }
 
+export function parseStatement(code: string): ast.Statement {
+  // Extracts a single statement from code containing a statement
+  const program = parseToAst(code, true);
+  if (program.body.length != 1) {
+    throw new Error("Expected a single statement");
+  }
+  return program.body[0];
+}
+
 export function statementToAst(statement: ESTree.Statement): ast.Statement {
   switch (statement.type) {
     case "BlockStatement":
