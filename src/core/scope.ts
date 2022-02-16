@@ -30,6 +30,10 @@ export class Scope {
     return false;
   }
 
+  hasImmediate(name: ast.Name): boolean {
+    return this.declarations[name] != null;
+  }
+
   get(name: string): ast.Node {
     const node = this.declarations[name];
     if (node != null) {

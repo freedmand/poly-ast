@@ -126,3 +126,10 @@ export type EventAttribute = {
 };
 
 export type Name = string | symbol;
+
+export const nullLiteral: Literal = {
+  type: "Literal",
+  value: {
+    type: "NullLiteral",
+  },
+};
