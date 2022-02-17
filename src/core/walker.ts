@@ -23,11 +23,25 @@ export class InsertAfterError extends Error {}
 export class ReplaceError extends Error {}
 export class RemoveError extends Error {}
 
+export type Shifts = { [index: number]: number };
+
+export function getShiftAmount(shifts: Shifts, index: number): number {
+  let shiftAmount = 0;
+  for (const [shiftIndex, shift] of Object.entries(shifts)) {
+    if (parseInt(shiftIndex) <= index) shiftAmount += shift;
+  }
+  return shiftAmount;
+}
+
+export function addShift(shifts: Shifts, index: number, amount: number) {
+  shifts[index] = (shifts[index] || 0) + amount;
+}
+
 export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
   readonly kind = "node";
-  public shift = 0;
-  public preShift = 0;
-  public postShift = 0;
+  public shifts: Shifts = {};
+  public preShifts: Shifts = {};
+  public postShifts: Shifts = {};
   public removed = false;
   public skipped = false;
 
@@ -39,9 +53,9 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
   ) {}
 
   _resetState() {
-    this.shift = 0;
-    this.preShift = 0;
-    this.postShift = 0;
+    this.shifts = {};
+    this.preShifts = {};
+    this.postShifts = {};
     this.removed = false;
     this.skipped = false;
   }
@@ -57,9 +71,13 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
       throw new InsertBeforeError("Cannot insert before non-indexed node");
     }
     const children = (this.parent.value as any)[this.property] as any[];
-    children.splice(this.index + this.parent.preShift, 0, ...nodes);
-    this.parent.shift += nodes.length; // shift the accounting of the traversal algorithm
-    this.parent.preShift += nodes.length; // shift accounting of pre-shift to handle multiple insert-befores
+    children.splice(
+      this.index + getShiftAmount(this.parent.preShifts, this.index),
+      0,
+      ...nodes
+    );
+    addShift(this.parent.shifts, this.index, nodes.length); // shift the accounting of the traversal algorithm
+    addShift(this.parent.preShifts, this.index, nodes.length); // shift accounting of pre-shift to handle multiple insert-befores
   }
 
   insertAfter(...nodes: ast.Node[]) {
@@ -74,11 +92,14 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
     }
     const children = (this.parent.value as any)[this.property] as any[];
     children.splice(
-      this.index + this.parent.shift + this.parent.postShift + 1,
+      this.index +
+        getShiftAmount(this.parent.shifts, this.index) +
+        getShiftAmount(this.parent.postShifts, this.index) +
+        1,
       0,
       ...nodes
     );
-    this.parent.postShift += nodes.length; // shift the accounting of the traversal algorithm
+    addShift(this.parent.postShifts, this.index, nodes.length); // shift the accounting of the traversal algorithm
   }
 
   replace(...nodes: ast.Node[]) {
@@ -100,8 +121,12 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
     } else {
       // Child replacement
       const children = (this.parent.value as any)[this.property] as any[];
-      children.splice(this.index + this.parent.shift, 1, ...nodes);
-      this.parent.shift += nodes.length - 1;
+      children.splice(
+        this.index + getShiftAmount(this.parent.shifts, this.index),
+        1,
+        ...nodes
+      );
+      addShift(this.parent.shifts, this.index, nodes.length - 1);
     }
   }
 
@@ -120,8 +145,11 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
     }
 
     const children = (this.parent.value as any)[this.property] as any[];
-    children.splice(this.index + this.parent.shift, 1);
-    this.parent.shift--;
+    children.splice(
+      this.index + getShiftAmount(this.parent.shifts, this.index),
+      1
+    );
+    addShift(this.parent.shifts, this.index, -1);
     this.removed = true;
     this.skipped = true;
   }
@@ -199,7 +227,9 @@ export function walk(node: ast.Node, walker: Walker<WalkObject>) {
   ): null {
     for (let i = 0; i < array.length; i++) {
       visit(walkNode(array[i], nodeObject, property, i));
-      i += nodeObject.shift + nodeObject.postShift;
+      i +=
+        getShiftAmount(nodeObject.shifts, i) +
+        getShiftAmount(nodeObject.postShifts, i);
       nodeObject._resetState();
     }
     return null;

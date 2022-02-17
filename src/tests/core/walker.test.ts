@@ -9,6 +9,7 @@ import {
 import { parseStatement, parseToAst } from "../../js/parse";
 import * as ast from "../../core/ast";
 import counterSource from "./counter.source.js";
+import { programToSource } from "../../js/translate";
 
 type SimplifiedWalkObject = SimplifiedWalkNode | SimplifiedWalkValue;
 
@@ -48,6 +49,15 @@ function toSimplified(walkObject: WalkObject): SimplifiedWalkObject {
         kind: "value",
         value: walkObject.value,
       };
+  }
+}
+
+function expectProgramToEqualSource(program: ast.Program, source: string) {
+  try {
+    expect(program).toEqual(parseToAst(source));
+  } catch (e) {
+    console.warn(`Program:\n--------\n${programToSource(program)}`);
+    throw e;
   }
 }
 
@@ -1364,5 +1374,66 @@ test("reactive insertion complex", () => {
     x = 2;
     setY();
   `)
+  );
+});
+
+test("insert before out of order", () => {
+  const program = parseToAst(`
+    let x = 0;
+    let y = 0;
+    let z = 0;
+  `);
+
+  let xDeclaration: WalkNode;
+
+  const { startDeclarations, endDeclarations } = walkDeclarations(program, {
+    enter(declarationNode) {
+      if (declarationNode.value.name == "x") {
+        xDeclaration = declarationNode;
+      } else if (declarationNode.value.name == "y") {
+        xDeclaration.insertBefore(parseStatement("let w = 0"));
+      }
+    },
+  });
+  expect(startDeclarations).toEqual(endDeclarations);
+  expect(startDeclarations).toEqual(["x", "y", "z"]);
+  expect(program).toEqual(
+    parseToAst(`
+    let w = 0;
+    let x = 0;
+    let y = 0;
+    let z = 0;
+  `)
+  );
+});
+
+test("insert after out of order", () => {
+  const program = parseToAst(`
+    let x = 0;
+    let y = 0;
+    let z = 0;
+  `);
+
+  let xDeclaration: WalkNode;
+
+  const { startDeclarations, endDeclarations } = walkDeclarations(program, {
+    enter(declarationNode) {
+      if (declarationNode.value.name == "x") {
+        xDeclaration = declarationNode;
+      } else if (declarationNode.value.name == "y") {
+        xDeclaration.insertAfter(parseStatement("let w = 0"));
+      }
+    },
+  });
+  expect(startDeclarations).toEqual(endDeclarations);
+  expect(startDeclarations).toEqual(["x", "y", "z"]);
+  expectProgramToEqualSource(
+    program,
+    `
+    let x = 0;
+    let w = 0;
+    let y = 0;
+    let z = 0;
+  `
   );
 });
