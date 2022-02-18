@@ -46,10 +46,10 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
   public skipped = false;
 
   constructor(
-    readonly value: T,
-    readonly parent: BaseWalkNode<ast.Node> | null,
-    readonly property: string | null,
-    readonly index: number | null
+    public value: T,
+    public parent: BaseWalkNode<ast.Node> | null,
+    public property: string | null,
+    public index: number | null
   ) {}
 
   _resetState() {
@@ -70,7 +70,7 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
     if (this.index == null) {
       throw new InsertBeforeError("Cannot insert before non-indexed node");
     }
-    const children = (this.parent.value as any)[this.property] as any[];
+    const children = (this.parent.value as any)[this.property] as ast.Node[];
     children.splice(
       this.index + getShiftAmount(this.parent.preShifts, this.index),
       0,
@@ -90,7 +90,7 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
     if (this.index == null) {
       throw new InsertAfterError("Cannot insert after non-indexed node");
     }
-    const children = (this.parent.value as any)[this.property] as any[];
+    const children = (this.parent.value as any)[this.property] as ast.Node[];
     children.splice(
       this.index +
         getShiftAmount(this.parent.shifts, this.index) +
@@ -102,7 +102,7 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
     addShift(this.parent.postShifts, this.index, nodes.length); // shift the accounting of the traversal algorithm
   }
 
-  replace(...nodes: ast.Node[]) {
+  replace(node: ast.Node) {
     if (this.parent == null) {
       throw new ReplaceError("Cannot replace root node");
     }
@@ -111,22 +111,17 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
     }
 
     if (this.index == null) {
-      if (nodes.length != 1) {
-        throw new ReplaceError(
-          "Can only replace a propertied node with a single node"
-        );
-      }
       // Property replacement
-      (this.parent.value as any)[this.property] = nodes[0];
+      (this.parent.value as any)[this.property] = node;
     } else {
       // Child replacement
-      const children = (this.parent.value as any)[this.property] as any[];
+      const children = (this.parent.value as any)[this.property] as ast.Node[];
       children.splice(
         this.index + getShiftAmount(this.parent.shifts, this.index),
         1,
-        ...nodes
+        node
       );
-      addShift(this.parent.shifts, this.index, nodes.length - 1);
+      this.value = node as any;
     }
   }
 
@@ -144,7 +139,7 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
       throw new RemoveError("Cannot remove node twice");
     }
 
-    const children = (this.parent.value as any)[this.property] as any[];
+    const children = (this.parent.value as any)[this.property] as ast.Node[];
     children.splice(
       this.index + getShiftAmount(this.parent.shifts, this.index),
       1
@@ -217,6 +212,26 @@ function nodeKeyMap<T extends ast.Node>(
   return null;
 }
 
+export function calibrateWalkObject(walkObject: WalkObject): boolean {
+  if (
+    walkObject.kind == "node" &&
+    walkObject.parent != null &&
+    walkObject.property != null &&
+    walkObject.index != null
+  ) {
+    // Calibrate index
+    const children = (walkObject.parent.value as any)[
+      walkObject.property
+    ] as ast.Node[];
+    const index = children.indexOf(walkObject.value);
+    if (index == -1) {
+      return false; // walk object does not exist
+    }
+    walkObject.index = index;
+  }
+  return true;
+}
+
 export function walk(node: ast.Node, walker: Walker<WalkObject>) {
   // Set up helper functions
   function visitArrayNode<T extends ast.Node, U extends ExcludeType<T>>(
@@ -231,6 +246,7 @@ export function walk(node: ast.Node, walker: Walker<WalkObject>) {
         getShiftAmount(nodeObject.shifts, i) +
         getShiftAmount(nodeObject.postShifts, i);
       nodeObject._resetState();
+      if (i > 1000) throw new Error("Infinite loop");
     }
     return null;
   }
@@ -398,7 +414,10 @@ export function walk(node: ast.Node, walker: Walker<WalkObject>) {
   function visit(walkObject: WalkObject): null {
     // Enter the node
     if (walker.enter != null) {
-      walker.enter(walkObject);
+      const shouldWalk = calibrateWalkObject(walkObject);
+      if (shouldWalk) {
+        walker.enter(walkObject);
+      }
     }
     // Removed or skipped
     if (walkObject.kind == "node" && walkObject.skipped) {
@@ -412,7 +431,10 @@ export function walk(node: ast.Node, walker: Walker<WalkObject>) {
 
     // Leave the node
     if (walker.leave != null) {
-      walker.leave(walkObject);
+      const shouldWalk = calibrateWalkObject(walkObject);
+      if (shouldWalk) {
+        walker.leave(walkObject);
+      }
     }
     return null;
   }

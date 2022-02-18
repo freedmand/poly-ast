@@ -802,15 +802,11 @@ test("replace and insert complex 2", () => {
         // Insert and replace depending on variable
         if (declaration == "x") {
           walkObject.insertBefore(parseStatement("let x1 = 0"));
-          walkObject.replace(
-            parseStatement("let x2 = 0"),
-            parseStatement("let x3 = 0")
-          );
+          walkObject.replace(parseStatement("let x2 = 0"));
+          walkObject.insertAfter(parseStatement("let x3 = 0"));
         } else if (declaration == "y") {
-          walkObject.replace(
-            parseStatement("let y1 = 0"),
-            parseStatement("let y2 = 0")
-          );
+          walkObject.replace(parseStatement("let y1 = 0"));
+          walkObject.insertAfter(parseStatement("let y2 = 0"));
         } else if (declaration == "z") {
           walkObject.insertBefore(parseStatement("let zPre = 0"));
         } else {
@@ -856,9 +852,9 @@ test("replace and insert complex 3", () => {
       if (isWalkNode(walkObject) && declaration != null) {
         // Insert and replace depending on variable
         if (declaration == "x") {
-          walkObject.replace();
+          walkObject.remove();
         } else if (declaration == "y") {
-          walkObject.replace();
+          walkObject.remove();
         } else if (declaration == "z") {
           walkObject.insertBefore(parseStatement("let zPre = 0"));
         } else {
@@ -936,10 +932,8 @@ test("replace and insert complex 5", () => {
             parseStatement("let y1 = 0"),
             parseStatement("let y2 = 0")
           );
-          walkObject.replace(
-            parseStatement("let y3 = 0"),
-            parseStatement("let y4 = 0")
-          );
+          walkObject.replace(parseStatement("let y3 = 0"));
+          walkObject.insertAfter(parseStatement("let y4 = 0"));
         } else if (declaration == "z") {
           walkObject.insertBefore(
             parseStatement("let z1 = 0"),
@@ -997,12 +991,12 @@ test("replace and insert complex 6", () => {
             parseStatement("let x2 = 0")
           );
         } else if (declaration == "y") {
-          walkObject.insertAfter(parseStatement("let y5 = 0"));
-          walkObject.insertAfter(parseStatement("let y6 = 0"));
-          walkObject.replace(
-            parseStatement("let y3 = 0"),
-            parseStatement("let y4 = 0")
+          walkObject.insertAfter(
+            parseStatement("let y4 = 0"),
+            parseStatement("let y5 = 0")
           );
+          walkObject.insertAfter(parseStatement("let y6 = 0"));
+          walkObject.replace(parseStatement("let y3 = 0"));
           walkObject.insertBefore(
             parseStatement("let y1 = 0"),
             parseStatement("let y2 = 0")
@@ -1430,10 +1424,119 @@ test("insert after out of order", () => {
   expectProgramToEqualSource(
     program,
     `
+      let x = 0;
+      let w = 0;
+      let y = 0;
+      let z = 0;
+    `
+  );
+});
+
+test("multiple insert before out of order", () => {
+  const program = parseToAst(`
     let x = 0;
-    let w = 0;
     let y = 0;
     let z = 0;
-  `
+  `);
+
+  let xDeclaration: WalkNode;
+
+  const { startDeclarations, endDeclarations } = walkDeclarations(program, {
+    enter(declarationNode) {
+      if (declarationNode.value.name == "x") {
+        xDeclaration = declarationNode;
+      } else if (declarationNode.value.name == "y") {
+        xDeclaration.insertBefore(parseStatement("let v = 0"));
+        xDeclaration.insertBefore(parseStatement("let w = 0"));
+      }
+    },
+  });
+  expect(startDeclarations).toEqual(endDeclarations);
+  expect(startDeclarations).toEqual(["x", "y", "z"]);
+  expect(program).toEqual(
+    parseToAst(`
+    let v = 0;
+    let w = 0;
+    let x = 0;
+    let y = 0;
+    let z = 0;
+  `)
+  );
+});
+
+test("multiple insert after out of order", () => {
+  const program = parseToAst(`
+    let x = 0;
+    let y = 0;
+    let z = 0;
+  `);
+
+  let xDeclaration: WalkNode;
+
+  const { startDeclarations, endDeclarations } = walkDeclarations(program, {
+    enter(declarationNode) {
+      if (declarationNode.value.name == "x") {
+        xDeclaration = declarationNode;
+      } else if (declarationNode.value.name == "y") {
+        xDeclaration.insertAfter(parseStatement("let v = 0"));
+        xDeclaration.insertAfter(parseStatement("let w = 0"));
+      }
+    },
+  });
+  expect(startDeclarations).toEqual(endDeclarations);
+  expect(startDeclarations).toEqual(["x", "y", "z"]);
+  expectProgramToEqualSource(
+    program,
+    `
+      let x = 0;
+      let v = 0;
+      let w = 0;
+      let y = 0;
+      let z = 0;
+    `
+  );
+});
+
+test("insert out of order complex", () => {
+  const program = parseToAst(`
+    let x = 0;
+    let y = 0;
+    let z = 0;
+  `);
+
+  let xDeclaration: WalkNode;
+
+  const { startDeclarations } = walkDeclarations(program, {
+    enter(declarationNode) {
+      if (declarationNode.value.name == "x") {
+        xDeclaration = declarationNode;
+        xDeclaration.insertAfter(parseStatement("let f = 0"));
+        xDeclaration.replace(parseStatement("let _x = 0"));
+        xDeclaration.insertBefore(parseStatement("let a = 0"));
+        xDeclaration.insertAfter(parseStatement("let g = 0"));
+      } else if (declarationNode.value.name == "y") {
+        xDeclaration.insertBefore(parseStatement("let b = 0"));
+        xDeclaration.insertAfter(parseStatement("let d = 0"));
+        xDeclaration.replace(parseStatement("let __x = 0"));
+        xDeclaration.insertAfter(parseStatement("let e = 0"));
+        xDeclaration.insertBefore(parseStatement("let c = 0"));
+      }
+    },
+  });
+  expect(startDeclarations).toEqual(["x", "y", "z"]);
+  expectProgramToEqualSource(
+    program,
+    `
+      let a = 0;
+      let b = 0;
+      let c = 0;
+      let __x = 0;
+      let d = 0;
+      let e = 0;
+      let f = 0;
+      let g = 0;
+      let y = 0;
+      let z = 0;
+    `
   );
 });
