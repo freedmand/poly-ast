@@ -20,6 +20,7 @@ export interface BaseWalkObject {
 
 export class InsertBeforeError extends Error {}
 export class InsertAfterError extends Error {}
+export class InsertBeforeFirstChildError extends Error {}
 export class ReplaceError extends Error {}
 export class RemoveError extends Error {}
 
@@ -100,6 +101,20 @@ export class BaseWalkNode<T extends ast.Node> implements BaseWalkObject {
       ...nodes
     );
     addShift(this.parent.postShifts, this.index, nodes.length); // shift the accounting of the traversal algorithm
+  }
+
+  insertBeforeFirstChild(property: string, ...nodes: ast.Node[]) {
+    const children: ast.Node[] | null = (this.value as any)[property];
+    if (children == null) {
+      throw new InsertBeforeFirstChildError(
+        "Cannot insert before first child, invalid property"
+      );
+    }
+
+    // Insert the nodes
+    children.splice(getShiftAmount(this.preShifts, 0), 0, ...nodes);
+    addShift(this.shifts, 0, nodes.length); // shift the accounting of the traversal algorithm
+    addShift(this.preShifts, 0, nodes.length); // shift accounting of pre-shift to handle multiple insert-befores
   }
 
   replace(node: ast.Node) {
@@ -246,7 +261,6 @@ export function walk(node: ast.Node, walker: Walker<WalkObject>) {
         getShiftAmount(nodeObject.shifts, i) +
         getShiftAmount(nodeObject.postShifts, i);
       nodeObject._resetState();
-      if (i > 1000) throw new Error("Infinite loop");
     }
     return null;
   }
@@ -431,14 +445,34 @@ export function walk(node: ast.Node, walker: Walker<WalkObject>) {
 
     // Leave the node
     if (walker.leave != null) {
-      const shouldWalk = calibrateWalkObject(walkObject);
-      if (shouldWalk) {
-        walker.leave(walkObject);
-      }
+      calibrateWalkObject(walkObject);
+      // Leave even if the walk object was removed
+      // (because otherwise downstream algos that depend
+      // on a leave called for every walk object will fail)
+      walker.leave(walkObject);
     }
     return null;
   }
 
   // Begin by visiting the passed in node
   visit(walkNode(node, null, null, null));
+}
+
+export function isWalkNode(walkObject: WalkObject): walkObject is WalkNode {
+  return walkObject.kind == "node";
+}
+
+export function isDeclareWalkNode(
+  walkObject: WalkObject
+): walkObject is BaseWalkNode<ast.DeclareStatement> {
+  return (
+    walkObject.kind == "node" && walkObject.value.type == "DeclareStatement"
+  );
+}
+
+export function isTypeWalkNode<T extends ast.Node>(
+  walkObject: WalkObject,
+  type: T["type"]
+): walkObject is BaseWalkNode<T> {
+  return walkObject.kind == "node" && walkObject.value.type == type;
 }

@@ -1,5 +1,8 @@
 import {
   BaseWalkNode,
+  isDeclareWalkNode,
+  isTypeWalkNode,
+  isWalkNode,
   RemoveError,
   walk,
   Walker,
@@ -348,25 +351,6 @@ function extractPath(walkObject: WalkNode | null): path[] {
   return (
     [[walkObject.value.type, walkObject.property, walkObject.index]] as path[]
   ).concat(extractPath(walkObject.parent));
-}
-
-function isWalkNode(walkObject: WalkObject): walkObject is WalkNode {
-  return walkObject.kind == "node";
-}
-
-function isDeclareWalkNode(
-  walkObject: WalkObject
-): walkObject is BaseWalkNode<ast.DeclareStatement> {
-  return (
-    walkObject.kind == "node" && walkObject.value.type == "DeclareStatement"
-  );
-}
-
-function isTypeWalkNode<T extends ast.Node>(
-  walkObject: WalkObject,
-  type: T["type"]
-): walkObject is BaseWalkNode<T> {
-  return walkObject.kind == "node" && walkObject.value.type == type;
 }
 
 function getAncestorOfType<T extends ast.Node>(
@@ -1537,6 +1521,65 @@ test("insert out of order complex", () => {
       let g = 0;
       let y = 0;
       let z = 0;
+    `
+  );
+});
+
+test("insert before first child", () => {
+  const program = parseToAst(`
+    let x = 0;
+    let y = () => {
+      let z = 0;
+    }
+  `);
+
+  walk(program, {
+    enter(walkObject) {
+      if (isDeclareWalkNode(walkObject) && walkObject.value.name == "z") {
+        expect(walkObject.parent).not.toBeNull();
+        walkObject.parent!.insertBeforeFirstChild(
+          "body",
+          parseStatement("let z0 = 0;")
+        );
+        walkObject.parent!.insertBeforeFirstChild(
+          "body",
+          parseStatement("let z1 = 0;"),
+          parseStatement("let z2 = 0;")
+        );
+      }
+    },
+    leave(walkObject) {
+      if (
+        walkObject.parent == null &&
+        isTypeWalkNode<ast.BlockStatement>(walkObject, "BlockStatement")
+      ) {
+        // Root node
+        walkObject.insertBeforeFirstChild(
+          "body",
+          parseStatement("let x0 = 0;"),
+          parseStatement("let x1 = 0;")
+        );
+        walkObject.insertBeforeFirstChild(
+          "body",
+          parseStatement("let x2 = 0;")
+        );
+      }
+    },
+  });
+
+  expectProgramToEqualSource(
+    program,
+    `
+      let x0 = 0;
+      let x1 = 0;
+      let x2 = 0;
+      let x = 0;
+      let y = () => {
+        let z0 = 0;
+        let z1 = 0;
+        let z2 = 0;
+        let z = 0;
+      }
     `
   );
 });
