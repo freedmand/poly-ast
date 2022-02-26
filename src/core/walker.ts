@@ -476,3 +476,24 @@ export function isTypeWalkNode<T extends ast.Node>(
 ): walkObject is BaseWalkNode<T> {
   return walkObject.kind == "node" && walkObject.value.type == type;
 }
+
+export class AncestorError extends Error {}
+
+/**
+ * Returns an ancestor of the current walk node with the specified type,
+ * throwing an AncestorError if it isn't found
+ */
+export function getAncestorOfType<T extends ast.Node>(
+  walkNode: WalkNode,
+  ...types: T["type"][]
+): BaseWalkNode<T> {
+  for (const type of types) {
+    if (isTypeWalkNode(walkNode, type)) {
+      return walkNode;
+    }
+  }
+  if (walkNode.parent == null) {
+    throw new Error("Ancestor not found");
+  }
+  return getAncestorOfType<T>(walkNode.parent, ...types);
+}

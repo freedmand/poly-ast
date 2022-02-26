@@ -1,5 +1,6 @@
 import {
   BaseWalkNode,
+  getAncestorOfType,
   isDeclareWalkNode,
   isTypeWalkNode,
   isWalkNode,
@@ -12,7 +13,7 @@ import {
 import { parseStatement, parseToAst } from "../../js/parse";
 import * as ast from "../../core/ast";
 import counterSource from "./counter.source.js";
-import { programToSource } from "../../js/translate";
+import { expectProgramToEqualSource } from "./testUtil";
 
 type SimplifiedWalkObject = SimplifiedWalkNode | SimplifiedWalkValue;
 
@@ -52,15 +53,6 @@ function toSimplified(walkObject: WalkObject): SimplifiedWalkObject {
         kind: "value",
         value: walkObject.value,
       };
-  }
-}
-
-function expectProgramToEqualSource(program: ast.Program, source: string) {
-  try {
-    expect(program).toEqual(parseToAst(source));
-  } catch (e) {
-    console.warn(`Program:\n--------\n${programToSource(program)}`);
-    throw e;
   }
 }
 
@@ -351,19 +343,6 @@ function extractPath(walkObject: WalkNode | null): path[] {
   return (
     [[walkObject.value.type, walkObject.property, walkObject.index]] as path[]
   ).concat(extractPath(walkObject.parent));
-}
-
-function getAncestorOfType<T extends ast.Node>(
-  walkNode: WalkNode,
-  type: T["type"]
-): BaseWalkNode<T> {
-  if (isTypeWalkNode(walkNode, type)) {
-    return walkNode;
-  }
-  if (walkNode.parent == null) {
-    throw new Error("Ancestor not found");
-  }
-  return getAncestorOfType<T>(walkNode.parent, type);
 }
 
 function extractDeclaration(walkObject: WalkObject): ast.Name | null {
@@ -1153,7 +1132,7 @@ test("multiple remove", () => {
   ).toThrowError(RemoveError);
 });
 
-test("nested traversal skip", () => {
+test("nested traversal no skip", () => {
   const program = parseToAst(`
     let a = 0;
     let b = () => {

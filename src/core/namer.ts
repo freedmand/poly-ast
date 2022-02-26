@@ -1,5 +1,17 @@
 import * as ast from "./ast";
-import { Scope } from "./scope";
+import {
+  assertScope,
+  handleReactives,
+  isPlaceholder,
+  Placeholder,
+  ReactiveAssignContext,
+  ReactiveTracker,
+  Scope,
+  ScopeContext,
+  scopePlaceholder,
+} from "./scope";
+import { PlaceholderError } from "./util";
+import { WalkNode, walk } from "./walker";
 
 export const lower = "abcdefghijklmnopqrstuvwxyz";
 export const digit = "0123456789";
@@ -106,7 +118,7 @@ export const defaultNameOptions: NameOptions = {
   resolver: new AppendNumberStrategy(),
 };
 
-export class Namer {
+export class Namer<T = WalkNode> {
   constructor(readonly nameOptions: NameOptions = defaultNameOptions) {}
 
   resolveName(name: string | null): string {
@@ -114,7 +126,7 @@ export class Namer {
     return this.nameOptions.resolver.resolveName(name);
   }
 
-  scopeHas(scope: Scope, name: ast.Name): boolean {
+  scopeHas(scope: Scope<T>, name: ast.Name): boolean {
     // Returns hasImmediate if aggressive is set
     if (this.nameOptions.aggressive) {
       return scope.hasImmediate(name);
@@ -125,7 +137,7 @@ export class Namer {
     }
   }
 
-  getName(scope: Scope, placeholder: Symbol): string {
+  getName(scope: Scope<T>, placeholder: Symbol): string {
     // Find the desired name to use
     let desiredName: string | null;
     if (this.nameOptions.minimize) {
@@ -150,4 +162,93 @@ export class Namer {
       }
     }
   }
+}
+
+export class ScopeRenamer extends Scope<WalkNode> {
+  public shadowScope: Scope<ast.Name>;
+  public nameScope: Scope<ast.Name>;
+  public nameMap: { [name: ast.Name]: string } = {};
+  public namer = new Namer<ast.Name>(this.nameOptions);
+
+  constructor(
+    readonly parent: ScopeRenamer | null = null,
+    readonly nameOptions: NameOptions = defaultNameOptions
+  ) {
+    super(parent, scopePlaceholder);
+    this.shadowScope =
+      parent == null
+        ? new Scope<ast.Name>(null, scopePlaceholder)
+        : new Scope<ast.Name>(parent.shadowScope, scopePlaceholder);
+    this.nameScope =
+      parent == null
+        ? new Scope<ast.Name>(null, scopePlaceholder)
+        : new Scope<ast.Name>(parent.nameScope, scopePlaceholder);
+  }
+
+  addDeclaration(name: ast.Name, node: WalkNode): ast.Name {
+    super.addDeclaration(name, node);
+    const renamed = this.namer.getName(this.shadowScope, Symbol());
+    this.shadowScope.addDeclaration(renamed, name);
+    this.nameScope.addDeclaration(name, renamed);
+    return renamed;
+  }
+
+  addReference(name: ast.Name, node: WalkNode | Placeholder): ast.Name {
+    super.addReference(name, node);
+    const renamed = this.nameScope.get(name);
+    if (isPlaceholder(renamed)) {
+      throw new PlaceholderError("Unexpected placeholder");
+    }
+    return renamed;
+  }
+}
+
+export function normalizeProgram(
+  program: ast.Program,
+  nameOptions: NameOptions = defaultNameOptions
+) {
+  walk(
+    program,
+    new ScopeContext<ScopeRenamer>(
+      (parent) => new ScopeRenamer(parent, nameOptions)
+    )
+  );
+}
+
+export function analyzeScopes(
+  program: ast.Program,
+  namer: Namer = new Namer()
+): Scope {
+  const reactiveTracker = new ReactiveTracker();
+  const scopeContext = new ScopeContext(
+    (parent, node) => new Scope(parent, node)
+  );
+  const reactiveAssignContext = new ReactiveAssignContext(scopeContext);
+
+  walk(program, {
+    enter(object) {
+      // Handle reactives
+      reactiveTracker.enter(object);
+      // Handle scopes
+      scopeContext.enter(object);
+      // Handle reactive assigns
+      reactiveAssignContext.enter(object);
+    },
+    leave(object) {
+      // Handle reactives
+      const reactives = reactiveTracker.leave(object);
+      if (reactives.length > 0) {
+        handleReactives(object, reactives, scopeContext);
+      }
+      // Handle scopes
+      scopeContext.leave(object);
+    },
+  });
+
+  assertScope(scopeContext.rootScope);
+
+  // Sub all scope placeholders
+  scopeContext.rootScope.subPlaceholders(namer);
+
+  return scopeContext.rootScope;
 }

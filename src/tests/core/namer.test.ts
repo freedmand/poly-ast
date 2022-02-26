@@ -1,4 +1,4 @@
-import { nullLiteral } from "../../core/ast";
+import * as ast from "../../core/ast";
 import {
   AppendNumberStrategy,
   digit,
@@ -9,6 +9,7 @@ import {
   UnderscorePrependStrategy,
 } from "../../core/namer";
 import { Scope } from "../../core/scope";
+import { normalizeProgramTest } from "./testUtil";
 
 test("set char at", () => {
   expect(setCharAt("dog", 2, "t")).toEqual("dot");
@@ -77,23 +78,23 @@ test("append number strategy", () => {
 });
 
 test("namer scopes", () => {
-  const namer = new Namer({
+  const namer = new Namer<ast.Node>({
     minimize: false,
     aggressive: false,
     resolver: new AppendNumberStrategy(),
   });
 
-  const scope = new Scope();
+  const scope = new Scope<ast.Node>(null, ast.nullLiteral);
 
   expect(namer.getName(scope, Symbol())).toEqual("__1");
   expect(namer.getName(scope, Symbol("dog"))).toEqual("dog");
 
   // Add dog into the scope
-  scope.add("dog", nullLiteral);
+  scope.addDeclaration("dog", ast.nullLiteral);
   // Now we should see a clash
   expect(namer.getName(scope, Symbol("dog"))).toEqual("dog__1");
   // If we add dog__1 in, we should have to keep going
-  scope.add("dog__1", nullLiteral);
+  scope.addDeclaration("dog__1", ast.nullLiteral);
   expect(namer.getName(scope, Symbol("dog"))).toEqual("dog__2");
   expect(namer.getName(scope, Symbol("dog__1"))).toEqual("dog__2");
   // dog__4 is brand new so a symbol with that name will just work
@@ -102,13 +103,13 @@ test("namer scopes", () => {
   expect(namer.getName(scope, Symbol())).toEqual("__1");
 
   // Create a child scope
-  const childScope = new Scope(scope);
+  const childScope = new Scope(scope, ast.nullLiteral);
   // Since dog__1 appears in a parent scope and aggressive is false,
   // dog__2 is returned
   expect(namer.getName(childScope, Symbol("dog"))).toEqual("dog__2");
 
   // If we create an aggressive namer, that won't be the case
-  const aggressiveNamer = new Namer({
+  const aggressiveNamer = new Namer<ast.Node>({
     ...namer.nameOptions,
     aggressive: true,
   });
@@ -118,7 +119,7 @@ test("namer scopes", () => {
   expect(aggressiveNamer.getName(childScope, Symbol("dog"))).toEqual("dog");
 
   // If we create a minimizing namer, it will ignore our desired names
-  const minimizeNamer = new Namer({
+  const minimizeNamer = new Namer<ast.Node>({
     ...namer.nameOptions,
     minimize: true,
   });
@@ -126,7 +127,7 @@ test("namer scopes", () => {
   expect(minimizeNamer.getName(childScope, Symbol("dog"))).toEqual("__1");
 
   // Lastly, let's have some fun with an aggressive, minizing namer
-  const optimalNamer = new Namer({
+  const optimalNamer = new Namer<ast.Node>({
     ...namer.nameOptions,
     minimize: true,
     aggressive: true,
@@ -134,7 +135,7 @@ test("namer scopes", () => {
   expect(optimalNamer.getName(scope, Symbol("dog"))).toEqual("__1");
   expect(optimalNamer.getName(childScope, Symbol("dog"))).toEqual("__1");
   // But if we add __1 to the parent scope
-  scope.add("__1", nullLiteral);
+  scope.addDeclaration("__1", ast.nullLiteral);
   // Optimal namer returns __2 but is the same for the parent scope
   expect(optimalNamer.getName(scope, Symbol("dog"))).toEqual("__2");
   expect(optimalNamer.getName(childScope, Symbol("dog"))).toEqual("__1");
@@ -143,11 +144,123 @@ test("namer scopes", () => {
   expect(minimizeNamer.getName(childScope, Symbol("dog"))).toEqual("__2");
 
   // Finally, for fun, we add __2 just to the child scope
-  childScope.add("__2", nullLiteral);
+  childScope.addDeclaration("__2", ast.nullLiteral);
   // Optimal namer returns __2 for parent, __1 for child (same as before)
   expect(optimalNamer.getName(scope, Symbol("dog"))).toEqual("__2");
   expect(optimalNamer.getName(childScope, Symbol("dog"))).toEqual("__1");
   // Minimal namer returns __2 for parent, __3 for child
   expect(minimizeNamer.getName(scope, Symbol("dog"))).toEqual("__2");
   expect(minimizeNamer.getName(childScope, Symbol("dog"))).toEqual("__3");
+});
+
+test("normalize program name", () => {
+  normalizeProgramTest(
+    `
+      let x = 1;
+    `,
+    `
+      let __1 = 1;
+    `
+  );
+});
+
+test("normalize program name function", () => {
+  normalizeProgramTest(
+    `
+      let x = 1;
+      let z = 2;
+      let c = 3;
+      let y = (x, y) => {
+        let z = x + y;
+        let w = (a, b) => {
+          let q = a + b + c;
+        };
+      };
+      let w = 3;
+      y();
+    `,
+    `
+      let __1 = 1;
+      let __2 = 2;
+      let __3 = 3;
+      let __4 = (__5, __6) => {
+        let __7 = __5 + __6;
+        let __8 = (__9, __10) => {
+          let __11 = __9 + __10 + __3;
+        };
+      };
+      let __5 = 3;
+      __4();
+    `
+  );
+});
+
+test("normalize program name complex", () => {
+  normalizeProgramTest(
+    `
+      let x = 1;
+      let y = 2;
+      {
+        let x = 1;
+        y = 3;
+        let a = 5;
+        x = 4;
+        let b = 6;
+        let c = 7;
+      }
+      x = 3;
+      y = 4;
+      let c = 8;
+    `,
+    `
+      let __1 = 1;
+      let __2 = 2;
+      {
+        let __3 = 1;
+        __2 = 3;
+        let __4 = 5;
+        __3 = 4;
+        let __5 = 6;
+        let __6 = 7;
+      }
+      __1 = 3;
+      __2 = 4;
+      let __3 = 8;
+    `
+  );
+});
+
+test("normalize program name complex", () => {
+  normalizeProgramTest(
+    `
+      let x = 1;
+      let y = 2;
+      {
+        let x = 1;
+        y = 3;
+        let a = 5;
+        x = 4;
+        let b = 6;
+        let c = 7;
+      }
+      x = 3;
+      y = 4;
+      let c = 8;
+    `,
+    `
+      let __1 = 1;
+      let __2 = 2;
+      {
+        let __3 = 1;
+        __2 = 3;
+        let __4 = 5;
+        __3 = 4;
+        let __5 = 6;
+        let __6 = 7;
+      }
+      __1 = 3;
+      __2 = 4;
+      let __3 = 8;
+    `
+  );
 });

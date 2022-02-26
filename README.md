@@ -9,3 +9,7 @@ To run the tests in watch mode (using Jest):
 ```sh
 npm run test
 ```
+
+## Credits
+
+See [CREDITS.md](./CREDITS.md)
