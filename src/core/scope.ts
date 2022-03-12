@@ -67,7 +67,7 @@ export class Scope<T = WalkNode> {
   assigns: { [name: ast.Name]: T[] } = {};
   // When the key name is updated (i.e. assigned to), call the
   // corresponding functions to reactively update
-  reactiveAssigns: { [name: ast.Name]: symbol[] } = {};
+  reactiveAssigns: { [name: ast.Name]: [symbol, ast.Name[]][] } = {};
   // Placeholders that need resolving later
   placeholders: { [name: symbol]: HasName[] } = {};
 
@@ -80,6 +80,10 @@ export class Scope<T = WalkNode> {
     }
   }
 
+  /**
+   * Returns whether the specified name is assigned in the scope
+   * or any parent scopes
+   */
   has(name: ast.Name): boolean {
     if (this.declarations[name] != null) {
       return true;
@@ -90,10 +94,18 @@ export class Scope<T = WalkNode> {
     return false;
   }
 
+  /**
+   * Returns whether the specified name is assigned in the immediate scope
+   * (does not check any parent scopes)
+   */
   hasImmediate(name: ast.Name): boolean {
     return this.declarations[name] != null;
   }
 
+  /**
+   * Grabs the value of the specified name in the scope or any parent scopes.
+   * @throws {VariableUndeclared} If the name is not found in any scopes
+   */
   get(name: ast.Name): T | Placeholder {
     const node = this.declarations[name];
     if (node != null) {
@@ -105,6 +117,11 @@ export class Scope<T = WalkNode> {
     throw new VariableUndeclared(`${String(name)} has not been declared`);
   }
 
+  /**
+   * Declares the variable in the scope to the specified node
+   * @throws {VariableRedeclared} If the name has already been declared in
+   *     the immediate scope.
+   */
   addDeclaration(name: ast.Name, node: T | Placeholder): ast.Name {
     if (this.declarations[name] != null) {
       throw new VariableRedeclared(`${String(name)} has already been declared`);
@@ -113,6 +130,10 @@ export class Scope<T = WalkNode> {
     return name;
   }
 
+  /**
+   * Adds a reference to the variable in the scope at a later node
+   * @throws {VariableUndeclared} If the name is not declared
+   */
   addReference(name: ast.Name, node: T | Placeholder): ast.Name {
     if (!this.has(name)) {
       throw new VariableUndeclared(`${String(name)} not found in scope`);
@@ -121,6 +142,10 @@ export class Scope<T = WalkNode> {
     return name;
   }
 
+  /**
+   * Adds a reference to an assign of the variable in the scope at a later node
+   * @throws {VariableUndeclared} If the name is not declared
+   */
   addAssign(name: ast.Name, node: T) {
     if (!this.has(name)) {
       throw new VariableUndeclared(`${String(name)} not found in scope`);
@@ -128,21 +153,71 @@ export class Scope<T = WalkNode> {
     this.assigns[name] = (this.assigns[name] || []).concat([node]);
   }
 
-  trackReactiveAssign(name: ast.Name, updateFuncName: symbol) {
+  /**
+   * Tracks a reactive variable in the current scope by name and the symbol of
+   * the update function to call if the variable is reassigned
+   * @param name The name of the variable
+   * @param updateFuncName The update function symbol to call when the variable
+   *     is reassigned
+   * @param dependencies What gets updated whenever the variable changes, i.e.
+   *     what the updateFuncName updates
+   * @throws {VariableUndeclared} If the name is not declared
+   */
+  trackReactiveAssign(
+    name: ast.Name,
+    updateFuncName: symbol,
+    ...dependencies: ast.Name[]
+  ) {
     if (!this.has(name)) {
       throw new VariableUndeclared(`${String(name)} not found in scope`);
     }
     this.reactiveAssigns[name] = (this.reactiveAssigns[name] || []).concat([
-      updateFuncName,
+      [updateFuncName, dependencies],
     ]);
   }
 
+  /**
+   * Retrieves all the placeholder functions to reactively update when a
+   * variable is assigned
+   * @param assignName The name of the variable getting assigned
+   * @returns An ordered list of all placeholder functions to call
+   */
+  getReactiveUpdates(
+    assignName: ast.Name,
+    _updateFuncs: symbol[] = []
+  ): symbol[] {
+    // Grab all the top-level reactive functions to run
+    const reactiveAssigns = this.reactiveAssigns[assignName] || [];
+    for (const [updateFuncName, dependencies] of reactiveAssigns) {
+      // Iterate through all the functions, adding them to a list
+      _updateFuncs.push(updateFuncName);
+      for (const dependency of dependencies) {
+        // Iterate through their dependencies, recursively including
+        // any update functions from dependent updates
+        this.getReactiveUpdates(dependency, _updateFuncs);
+      }
+    }
+    return _updateFuncs;
+  }
+
+  /**
+   * Tracks a new usage of a placeholder in the current scope. A placeholder is
+   * typically auto-generated, so we need to explicitly track each of its uses
+   * so they can be reoslved to a proper name post-analysis.
+   * @param placeholder The placeholder symbol
+   * @param node The node that uses the placeholder
+   */
   trackPlaceholder(placeholder: symbol, node: HasName) {
     this.placeholders[placeholder] = (
       this.placeholders[placeholder] || []
     ).concat([node]);
   }
 
+  /**
+   * Substitutes all the placeholders in the scope with names
+   * @param namer The namer instance that defines the strategy to use when
+   *     resolving all the names
+   */
   subPlaceholders(namer: Namer<T>) {
     for (const placeholder of Object.getOwnPropertySymbols(this.placeholders)) {
       const nodes = this.placeholders[placeholder];
@@ -259,7 +334,7 @@ export class ReactiveAssignContext {
       if (object.value.left.type == "Identifier") {
         assertScope(this.scopeContext.scope);
         const funcsToUpdateReactives =
-          this.scopeContext.scope.reactiveAssigns[object.value.left.name] || [];
+          this.scopeContext.scope.getReactiveUpdates(object.value.left.name);
         if (funcsToUpdateReactives.length > 0) {
           // Find the parent statement
           const parentStatement = getAncestorOfType<ast.Statement>(
@@ -464,12 +539,20 @@ export class ReactiveTracker {
 
 export class ReactiveError extends Error {}
 
+/**
+ * A function to call when you leave a declare or expression statement
+ * that will bind the reactives to the scope.
+ * @param walkObject The reference to the node you are leaving in the walker
+ * @param reactives A list of reactives that were encountered
+ * @param scopeContext The current scope context
+ */
 export function handleReactives(
   walkObject: WalkObject,
   reactives: Reactive[],
   scopeContext: ScopeContext<Scope<WalkNode>>
 ) {
   if (reactives.length == 0) {
+    // The function should not get called unless there are reactives
     throw new ReactiveError("No reactives to handle");
   }
 
@@ -484,6 +567,7 @@ export function handleReactives(
     }
     assertScope(scopeContext.scope);
 
+    const dependent = walkObject.value.name;
     // Insert empty declaration above
     walkObject.insertBefore({
       type: "DeclareStatement",
@@ -537,7 +621,11 @@ export function handleReactives(
     scopeContext.scope.trackPlaceholder(updateClosureName, identifier);
     // Track future changes
     for (const reactive of reactives) {
-      scopeContext.scope.trackReactiveAssign(reactive.name, updateClosureName);
+      scopeContext.scope.trackReactiveAssign(
+        reactive.name,
+        updateClosureName,
+        dependent
+      );
     }
   } else if (
     isTypeWalkNode<ast.ExpressionStatement>(walkObject, "ExpressionStatement")

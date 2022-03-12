@@ -451,3 +451,138 @@ test("scope analysis reactive assigns", () => {
     `
   );
 });
+
+test("scope analysis reactive expressions", () => {
+  scopeAnalysisTest(
+    `
+      let x = 0;
+      let log = x => x;
+      log(reactive(x));
+    `,
+    `
+      let x = 0;
+      let log = x => x;
+      let __setX = () => {
+        log(x);
+      };
+      __setX();
+    `
+  );
+
+  scopeAnalysisTest(
+    `
+      let x = 0;
+      let log = x => x;
+      log(reactive(x));
+      x = 9;
+    `,
+    `
+      let x = 0;
+      let log = x => x;
+      let __setX = () => {
+        log(x);
+      };
+      __setX();
+      x = 9;
+      __setX();
+    `
+  );
+});
+
+test("scope analysis reactive function return", () => {
+  scopeAnalysisTest(
+    `
+      let x = 0;
+      let getAnswer = () => {
+        return reactive(x);
+      }
+    `,
+    `
+      let x = 0;
+      let getAnswer;
+      let __setX = () => {
+        getAnswer = () => {
+          return x;
+        }
+      };
+      __setX();
+    `
+  );
+
+  scopeAnalysisTest(
+    `
+      let x = 0;
+      let getAnswer = () => {
+        return reactive(x);
+      }
+      x = 9;
+    `,
+    `
+      let x = 0;
+      let getAnswer;
+      let __setX = () => {
+        getAnswer = () => {
+          return x;
+        }
+      };
+      __setX();
+      x = 9;
+      __setX();
+    `
+  );
+
+  scopeAnalysisTest(
+    `
+      let x = 0;
+      let getAnswer = () => {
+        return reactive(x);
+      };
+      let y = getAnswer();
+      x = 9;
+    `,
+    `
+    let x = 0;
+    let getAnswer;
+    let __setX = () => {
+      getAnswer = () => {
+        return x;
+      }
+    };
+    __setX();
+    let y = getAnswer();
+    x = 9;
+    __setX();
+    `
+  );
+});
+
+test("scope analysis nested reactive function", () => {
+  scopeAnalysisTest(
+    `
+      let x = 0;
+      let getAnswer = () => {
+        return reactive(x);
+      };
+      let y = reactive(getAnswer)();
+      x = 9;
+    `,
+    `
+    let x = 0;
+    let getAnswer;
+    let __setX = () => {
+      getAnswer = () => {
+        return x;
+      }
+    };
+    __setX();
+    let y;
+    let __setY = () => {
+      y = getAnswer();
+    }
+    __setY();
+    x = 9;
+    __setX();
+    __setY();
+    `
+  );
+});

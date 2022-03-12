@@ -264,3 +264,54 @@ test("normalize program name complex", () => {
     `
   );
 });
+
+test("normalize program name double nested", () => {
+  normalizeProgramTest(
+    `
+      let x = 1;
+      let y = 2;
+      {
+        let x = 1;
+        y = 3;
+        let a = 5;
+        x = 4;
+        let b = 6;
+        let c = 7;
+      }
+      x = 3;
+      y = 4;
+      {
+        let x = 1;
+        y = 3;
+        let a = 5;
+        x = 4;
+        let b = 6;
+        let c = 7;
+      }
+      let c = 8;
+    `,
+    `
+      let __1 = 1;
+      let __2 = 2;
+      {
+        let __3 = 1;
+        __2 = 3;
+        let __4 = 5;
+        __3 = 4;
+        let __5 = 6;
+        let __6 = 7;
+      }
+      __1 = 3;
+      __2 = 4;
+      {
+        let __3 = 1;
+        __2 = 3;
+        let __4 = 5;
+        __3 = 4;
+        let __5 = 6;
+        let __6 = 7;
+      }
+      let __3 = 8;
+    `
+  );
+});
