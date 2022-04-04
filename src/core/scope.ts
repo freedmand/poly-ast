@@ -176,6 +176,24 @@ export class Scope<T = WalkNode> {
     ]);
   }
 
+  removeReactiveDependencies(dependent: ast.Name) {
+    for (const name of Object.keys(this.reactiveAssigns)) {
+      const results: [symbol, ast.Name[]][] = [];
+      for (const [updateFunc, dependencies] of this.reactiveAssigns[name] ||
+        []) {
+        const filteredDependencies = dependencies.filter(
+          (dependency) => dependency != dependent
+        );
+        if (filteredDependencies.length == 0 && dependencies.length > 0) {
+          // Remove from results
+        } else {
+          results.push([updateFunc, filteredDependencies]);
+        }
+      }
+      this.reactiveAssigns[name] = results;
+    }
+  }
+
   /**
    * Retrieves all the placeholder functions to reactively update when a
    * variable is assigned
@@ -333,6 +351,12 @@ export class ReactiveAssignContext {
       // See if any reactives are affected
       if (object.value.left.type == "Identifier") {
         assertScope(this.scopeContext.scope);
+
+        // Clear previous reactive assigns
+        this.scopeContext.scope.removeReactiveDependencies(
+          object.value.left.name
+        );
+
         const funcsToUpdateReactives =
           this.scopeContext.scope.getReactiveUpdates(object.value.left.name);
         if (funcsToUpdateReactives.length > 0) {

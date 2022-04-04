@@ -489,6 +489,32 @@ test("scope analysis reactive expressions", () => {
   );
 });
 
+test("scope analysis multireactive expression", () => {
+  scopeAnalysisTest(
+    `
+      let a = 1;
+      let b = 2;
+      let log = x => x;
+      log(reactive(a) + reactive(b));
+      let z = (a = 2) + (b = 3);
+    `,
+    `
+      let a = 1;
+      let b = 2;
+      let log = x => x;
+      let __set_a_or_b = () => {
+        log(a + b);
+      }
+      __set_a_or_b();
+      let _a = a = 2;
+      __set_a_or_b();
+      let _b = b = 3;
+      __set_a_or_b();
+      let z = _a + _b;
+    `
+  );
+});
+
 test("scope analysis reactive function return", () => {
   scopeAnalysisTest(
     `
@@ -586,3 +612,144 @@ test("scope analysis nested reactive function", () => {
     `
   );
 });
+
+test("scope analysis reactive dependency deep chaining", () => {
+  scopeAnalysisTest(
+    `
+      let a = 0;
+      let b = reactive(a) + 1;
+      let c = reactive(b) + 2;
+      let d = reactive(c) + 3;
+      let e = reactive(d) + 4;
+      a = 1;
+    `,
+    `
+    let a = 0;
+    let b;
+    let __setB = () => {
+      b = a + 1;
+    }
+    __setB();
+    let c;
+    let __setC = () => {
+      c = b + 2;
+    }
+    __setC();
+    let d;
+    let __setD = () => {
+      d = c + 3;
+    }
+    __setD();
+    let e;
+    let __setE = () => {
+      e = d + 4;
+    }
+    __setE();
+    a = 1;
+    __setB();
+    __setC();
+    __setD();
+    __setE();
+    `
+  );
+});
+
+test("scope analysis multiple reactive assigns for one variable", () => {
+  scopeAnalysisTest(
+    `
+      let a = 0;
+      let b = reactive(a) + 1;
+      let c = reactive(a) + 2;
+      a = 1;
+    `,
+    `
+    let a = 0;
+    let b;
+    let __setB = () => {
+      b = a + 1;
+    }
+    __setB();
+    let c;
+    let __setC = () => {
+      c = a + 2;
+    }
+    __setC();
+    a = 1;
+    __setB();
+    __setC();
+    `
+  );
+});
+
+test("scope analysis unset reactive", () => {
+  scopeAnalysisTest(
+    `
+      let a = 0;
+      let b = reactive(a) + 1;
+      a = 1;
+      b = 2;
+      a = 3;
+    `,
+    `
+    let a = 0;
+    let b;
+    let __setB = () => {
+      b = a + 1;
+    }
+    __setB();
+    a = 1;
+    __setB();
+    b = 2;
+    a = 3;
+    `
+  );
+});
+
+// test("scope analysis different scopes", () => {
+//   scopeAnalysisTest(
+//     `
+//       let x = 1;
+//       {
+//         let y = 2;
+//         {
+//           let a = reactive(x) + reactive(y);
+//           let log = x => x;
+//           log(reactive(a));
+//         }
+
+//         y = 3;
+//         x = 2;
+//       }
+//       x = 3;
+//     `,
+//     `
+//       let __setA;
+//       let __updateA;
+//       let x = 1;
+//       {
+//         let y = 2;
+//         {
+//           let a;
+//           __setA = () => {
+//             a = x + y;
+//           }
+//           __setA();
+//           let log = x => x;
+//           __updateA = () => {
+//             log(a);
+//           }
+//           __updateA();
+//         }
+//         y = 3;
+//         __setA();
+//         __updateA();
+//         x = 2;
+//         __setA();
+//         __updateA();
+//       }
+//       x = 3;
+//       __setA();
+//       __updateA();
+//     `
+//   );
+// });
